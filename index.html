@@ -85,6 +85,8 @@ body.no-reftags .reftag{display:none}
 .btn-danger:hover{background:rgba(248,113,113,.12)}
 .btn-sm{padding:8px 12px;font-size:13px;border-radius:7px}
 .btn-block{width:100%}
+.btn-block.fin{background:var(--green);border-color:#047857;color:#fff}
+.btn-block.fin:hover{background:#047857}
 .login-err{background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.35);color:#fca5a5;border-radius:8px;padding:11px 13px;font-size:13px}
 .login-foot{font-size:11px;color:var(--ink-dim);text-align:center;font-family:var(--mono);letter-spacing:.06em;padding-top:4px}
 
@@ -96,6 +98,9 @@ body.no-reftags .reftag{display:none}
 .statline{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px}
 .stat{flex:1;min-width:96px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;position:relative;overflow:hidden}
 .stat .bar{position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--amber)}
+.statbtn{cursor:pointer;text-align:left;transition:.13s;font-family:inherit}
+.statbtn:hover{border-color:var(--ink-dim)}
+.statbtn.on{border-color:var(--amber);box-shadow:0 0 0 2px rgba(245,158,11,.15)}
 .stat-n{font-family:var(--disp);font-weight:800;font-size:24px;line-height:1}
 .stat-l{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-dim);margin-top:6px}
 .filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px;align-items:center}
@@ -207,6 +212,34 @@ select.input{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xml
 .vrow .v-name{font-weight:600;flex:1;min-width:0}
 .vrow .v-meta{font-size:11px;color:var(--ink-dim);font-family:var(--mono)}
 
+/* ===== VIEW AS ===== */
+.va-list{display:flex;flex-direction:column;gap:6px;max-height:48vh;overflow-y:auto}
+.va-row{display:flex;align-items:center;gap:12px;padding:11px 13px;background:var(--panel-2);border:1px solid var(--line-soft);border-radius:9px;text-align:left;transition:.12s;font-family:inherit}
+.va-row:hover{border-color:var(--amber);background:#fff}
+.va-name{font-weight:600;font-size:14px;flex:1;min-width:0;color:var(--ink)}
+.va-role{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--amber)}
+/* simulation frame: shrink the app into a centered, bordered window */
+body.simulating{padding-top:54px}
+body.simulating #app{
+  max-width:880px;margin:14px auto 40px;border:2px solid var(--amber);
+  border-radius:16px;overflow:hidden;box-shadow:0 12px 50px rgba(180,83,9,.25);
+  position:relative;background:var(--ground);
+}
+body.simulating .topbar{position:static}
+body.simulating .wrap{padding-bottom:40px}
+.sim-banner{
+  position:fixed;top:0;left:0;right:0;z-index:70;height:46px;
+  background:var(--amber);color:#3a2600;display:flex;align-items:center;gap:14px;
+  padding:0 16px;box-shadow:0 2px 10px rgba(0,0,0,.15);
+}
+.sim-tag{font-family:var(--mono);font-size:10px;font-weight:800;letter-spacing:.14em;background:#3a2600;color:var(--amber);padding:4px 8px;border-radius:5px}
+.sim-who{display:flex;flex-direction:column;line-height:1.15;flex:1;min-width:0}
+.sim-who b{font-size:14px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sim-who span{font-size:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;opacity:.8}
+.sim-return{background:#3a2600!important;color:var(--amber)!important;border-color:#3a2600!important;flex-shrink:0}
+.sim-return:hover{background:#1f1400!important}
+@media(max-width:560px){body.simulating #app{margin:10px;border-radius:12px}.sim-who b{font-size:13px}}
+
 .toast{position:fixed;left:50%;bottom:26px;transform:translate(-50%,30px);z-index:80;background:var(--panel-2);border:1px solid var(--line);color:var(--ink);padding:12px 18px;border-radius:10px;font-size:14px;font-weight:500;box-shadow:var(--shadow);opacity:0;transition:.25s;max-width:90vw;display:flex;align-items:center;gap:9px}
 .toast.show{opacity:1;transform:translate(-50%,0)}
 .toast.ok{border-color:rgba(52,211,153,.4)}
@@ -266,6 +299,7 @@ select.input{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xml
       <div class="who-role" id="whoRole">—</div>
     </div>
     <button class="icon-btn" id="refreshBtn" title="Refresh now" onclick="manualRefresh()">⟳</button>
+    <button class="icon-btn hidden" id="viewAsBtn" title="View as another person" onclick="openViewAs()">👁</button>
     <button class="icon-btn hidden" id="vendorTopBtn" title="Approved vendors" onclick="openVendors()">🏢</button>
     <button class="icon-btn" id="tagToggle" title="Toggle reference tags" onclick="toggleTags()">#</button>
     <button class="icon-btn" title="Sign out" onclick="logout()">⏻</button>
@@ -284,10 +318,10 @@ select.input{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xml
    ticket; coach/director/tech are resolved LIVE from the master.
    ============================================================ */
 const API_BASE_URL = "https://alignment-api-khaki.vercel.app/api/dpm-alignment";
-const APP_WRITE_PASSWORD = "rm123"; // must match ROLES.MAINTENANCE on the API
+const APP_WRITE_PASSWORD = "maint-76051"; // must match ROLES.MAINTENANCE on the API
 const IMGBB_API_KEY = "b733862d15744e2bfaa4329d122f4ba0";
 const POLL_MS = 20000;
-let   SHOW_REF_TAGS = true; // ← set false (or use the # button) to hide reference badges
+let   SHOW_REF_TAGS = false; // default OFF — toggle with the # button in the top bar
 
 const ROLE_PASSWORDS = {
   admin:"Overwatch@76051", director:"DO@76051", coach:"AC@76051", manager:"Dossani@76051", tech:"Repair@76051",
@@ -297,12 +331,17 @@ const TICKETS_NODE = "maintenanceTickets";
 const VENDORS_NODE = "maintenanceVendors";
 
 const STATUSES = {
-  open:{label:"Open",color:"var(--s-open)"}, assigned:{label:"Assigned",color:"var(--s-assigned)"},
-  in_progress:{label:"In Progress",color:"var(--s-progress)"}, waiting:{label:"Waiting",color:"var(--s-waiting)"},
-  finished:{label:"Finished",color:"var(--s-finished)"}, resolved:{label:"Resolved",color:"var(--s-resolved)"},
+  unassigned:{label:"Unassigned",color:"var(--s-open)"},
+  assigned:{label:"Assigned (Vendor)",color:"var(--s-assigned)"},
+  dispatched:{label:"Dispatched",color:"var(--violet)"},
+  waiting:{label:"Waiting",color:"var(--s-waiting)"},
+  in_progress:{label:"In Progress",color:"var(--s-progress)"},
+  finished:{label:"Finished",color:"var(--s-finished)"},
   closed:{label:"Closed",color:"var(--s-closed)"},
 };
-const STATUS_ORDER = ["open","assigned","in_progress","waiting","finished","resolved","closed"];
+const STATUS_ORDER = ["unassigned","assigned","dispatched","waiting","in_progress","finished","closed"];
+// statuses that count as "still active" (not closed)
+const ACTIVE_STATUSES = ["unassigned","assigned","dispatched","waiting","in_progress","finished"];
 const CATEGORIES = {plumbing:"Plumbing",equipment:"Equipment",hvac:"HVAC",electrical:"Electrical",it:"IT / POS",structural:"Structural",safety:"Safety",other:"Other"};
 const CAT_PREFIX = {plumbing:"PLM",equipment:"EQP",hvac:"HVC",electrical:"ELE",it:"IT",structural:"STR",safety:"SAF",other:"GEN"};
 const PRIORITIES = {low:"Low",normal:"Normal",high:"High",urgent:"Urgent"};
@@ -379,6 +418,7 @@ function storeNum(rid){return store(rid).storeNumber||""}
 function storeDirector(rid){const id=store(rid).assignedDirectorId;return (MASTER.directors||{})[id]||null}
 function storeCoach(rid){const id=store(rid).assignedAreaCoachId;return (MASTER.areaCoaches||{})[id]||null}
 function storeTech(rid){const id=store(rid).assignedRepairTechnicianId;return (MASTER.repairTechnicians||{})[id]||null}
+function techName(tid){return (MASTER.repairTechnicians||{})[tid]?.name||null}
 function storeManagerName(rid){return store(rid).storeManager||""}
 
 /* ============================================================ LOGIN */
@@ -391,7 +431,7 @@ async function doLogin(){
     await refresh();
     const sess=resolveSession(email,pw);
     if(sess.error){btn.disabled=false;btn.textContent="Sign in";return showErr(sess.error)}
-    SESSION=sess; enterApp();
+    SESSION=sess; saveSession(email,pw); enterApp();
   }catch(e){showErr(e.message||"Something went wrong.");btn.disabled=false;btn.textContent="Sign in"}
   function showErr(m){errEl.textContent=m;errEl.classList.remove("hidden")}
 }
@@ -405,7 +445,7 @@ function resolveSession(email,pw){
   }
   const dirs=MASTER.directors||{}, dId=Object.keys(dirs).find(id=>me(dirs,id));
   if(dId){if(pw!==ROLE_PASSWORDS.director)return{error:"That password doesn't match the director role."};
-    return{email:lc,role:"director",name:dirs[dId].name,scope:"stores",refField:"assignedDirectorId",refId:dId}}
+    return{email:lc,role:"director",name:dirs[dId].name,scope:"director",refId:dId}}
   const co=MASTER.areaCoaches||{}, cId=Object.keys(co).find(id=>me(co,id));
   if(cId){if(pw!==ROLE_PASSWORDS.coach)return{error:"That password doesn't match the area coach role."};
     return{email:lc,role:"coach",name:co[cId].name,scope:"stores",refField:"assignedAreaCoachId",refId:cId}}
@@ -418,16 +458,108 @@ function resolveSession(email,pw){
   return{error:"We couldn't find that email in the alignment master. Check it's the email on file."};
 }
 
+/* ============================================================ VIEW AS (overwatch only)
+   Builds an impersonated session for any person using the SAME shape resolveSession
+   produces, so the simulated view matches exactly what that person would see.
+   REAL_SESSION holds the admin's true session while impersonating. */
+let REAL_SESSION=null;
+function buildImpersonatedSession(kind,id){
+  if(kind==="director"){const d=MASTER.directors[id];return{email:(d.email||"").toLowerCase(),role:"director",name:d.name,scope:"director",refId:id,_sim:true}}
+  if(kind==="coach"){const c=MASTER.areaCoaches[id];return{email:(c.email||"").toLowerCase(),role:"coach",name:c.name,scope:"stores",refField:"assignedAreaCoachId",refId:id,_sim:true}}
+  if(kind==="tech"){const t=MASTER.repairTechnicians[id];return{email:(t.email||"").toLowerCase(),role:"tech",name:t.name,scope:"stores",refField:"assignedRepairTechnicianId",refId:id,_sim:true}}
+  if(kind==="manager"){const s=RESTAURANTS[id];return{email:(s.email||"").toLowerCase(),role:"manager",name:s.storeManager||storeName(id),scope:"single",storeId:id,_sim:true}}
+  return null;
+}
+// flat, alphabetically-sorted roster of everyone an admin can view as
+function viewAsRoster(){
+  const list=[];
+  Object.entries(MASTER.directors||{}).forEach(([id,d])=>list.push({kind:"director",id,name:d.name,role:"Director"}));
+  Object.entries(MASTER.areaCoaches||{}).forEach(([id,c])=>list.push({kind:"coach",id,name:c.name,role:"Area Coach"}));
+  Object.entries(MASTER.repairTechnicians||{}).forEach(([id,t])=>list.push({kind:"tech",id,name:t.name,role:"Repair Tech"}));
+  Object.keys(RESTAURANTS).forEach(id=>{
+    const s=RESTAURANTS[id];
+    if(s.storeManager)list.push({kind:"manager",id,name:s.storeManager,role:"Manager · "+storeNum(id)});
+  });
+  return list.sort((a,b)=>a.name.localeCompare(b.name));
+}
+function startViewAs(kind,id){
+  const sim=buildImpersonatedSession(kind,id);
+  if(!sim){toast("Couldn't load that view","err");return}
+  if(!REAL_SESSION)REAL_SESSION=SESSION;       // remember the real admin session once
+  SESSION=sim;
+  managerScreen="hub";
+  openGroups={}; myStoreIds().forEach(s=>openGroups[s]=true);
+  document.body.classList.add("simulating");
+  enterAppChrome();
+  render();
+  renderSimBanner();
+}
+function returnToMyAccount(){
+  if(!REAL_SESSION)return;
+  SESSION=REAL_SESSION; REAL_SESSION=null;
+  document.body.classList.remove("simulating");
+  const b=$("simBanner"); if(b)b.remove();
+  managerScreen="hub";
+  openGroups={}; myStoreIds().forEach(s=>openGroups[s]=true);
+  enterAppChrome();
+  render();
+  toast("Back to your account");
+}
+function openViewAs(){
+  const roster=viewAsRoster();
+  const rowHtml=r=>`
+    <button class="va-row" data-name="${escA(r.name.toLowerCase())}" onclick="closeModal();startViewAs('${r.kind}','${r.id}')">
+      <span class="va-name">${esc(r.name)}</span>
+      <span class="va-role">${esc(r.role)}</span>
+    </button>`;
+  modal(`
+    <div class="sheet-head"><h2>View as…</h2><button class="x-btn" onclick="closeModal()">✕</button></div>
+    <div class="sheet-body">
+      <p style="color:var(--ink-dim);font-size:13px;margin-top:0">See the app exactly as this person sees it. You can return to your own account anytime.</p>
+      <input class="input" id="vaSearch" placeholder="Search by name…" oninput="filterViewAs(this.value)" style="margin-bottom:12px">
+      <div class="va-list" id="vaList">${roster.map(rowHtml).join("")}</div>
+    </div>
+    <div class="sheet-foot"><button class="btn btn-ghost btn-block" onclick="closeModal()">Cancel</button></div>`);
+}
+function filterViewAs(q){
+  q=(q||"").toLowerCase().trim();
+  document.querySelectorAll("#vaList .va-row").forEach(row=>{
+    row.style.display = row.getAttribute("data-name").includes(q) ? "" : "none";
+  });
+}
+function renderSimBanner(){
+  let b=$("simBanner");
+  if(!b){b=document.createElement("div");b.id="simBanner";document.body.appendChild(b);}
+  b.className="sim-banner";
+  b.innerHTML=`
+    <div class="sim-tag">VIEWING AS</div>
+    <div class="sim-who"><b>${esc(SESSION.name)}</b><span>${esc(ROLE_LABEL[SESSION.role])}</span></div>
+    <button class="btn btn-primary btn-sm sim-return" onclick="returnToMyAccount()">↩ Return to my account</button>`;
+}
+
 /* ============================================================ SCOPING (store-anchored, computed live) */
 function myStoreIds(){
   if(!SESSION) return [];
   if(SESSION.scope==="all") return Object.keys(RESTAURANTS);
   if(SESSION.scope==="single") return [SESSION.storeId];
-  // director/coach/tech: all stores whose live assignment field === my id
+  if(SESSION.scope==="director"){
+    // Director sees: stores stamped directly with their id, PLUS every store
+    // under any area coach who reports to them (areaCoaches[].assignedDirectorId).
+    const myCoaches=Object.keys(MASTER.areaCoaches||{}).filter(cid=>(MASTER.areaCoaches[cid].assignedDirectorId)===SESSION.refId);
+    const coachSet=new Set(myCoaches);
+    return Object.keys(RESTAURANTS).filter(r=>{
+      const s=RESTAURANTS[r];
+      return s.assignedDirectorId===SESSION.refId || coachSet.has(s.assignedAreaCoachId);
+    });
+  }
+  // coach/tech: stores whose live assignment field === my id
   return Object.keys(RESTAURANTS).filter(r=>RESTAURANTS[r][SESSION.refField]===SESSION.refId);
 }
+// Closed tickets vanish from every view EXCEPT overwatch (kept for stats/reports).
 function ticketsForStore(sid){
-  return Object.keys(TICKETS).map(k=>({_id:k,...TICKETS[k]})).filter(t=>t.storeId===sid);
+  return Object.keys(TICKETS).map(k=>({_id:k,...TICKETS[k]}))
+    .filter(t=>t.storeId===sid)
+    .filter(t=>SESSION.role==="admin" || t.status!=="closed");
 }
 
 /* ============================================================ PERMISSIONS */
@@ -437,21 +569,43 @@ function canEditContent(){return SESSION.role==="admin"}
 function canAssign(){return SESSION.role==="admin"}
 
 /* ============================================================ ENTER / POLL */
-function enterApp(){
+function enterAppChrome(){
   $("loginStage").classList.add("hidden");
   $("app").classList.remove("hidden");
   $("whoName").textContent=SESSION.name;
   $("whoRole").textContent=ROLE_LABEL[SESSION.role];
   $("brandSub").textContent=ROLE_LABEL[SESSION.role]+" Console";
   $("vendorTopBtn").classList.toggle("hidden",!canManageVendors());
+  // View As is available only to a real (non-simulated) admin
+  const realAdmin = (REAL_SESSION?REAL_SESSION:SESSION).role==="admin" && !SESSION._sim;
+  $("viewAsBtn").classList.toggle("hidden",!realAdmin);
   document.body.classList.toggle("no-reftags",!SHOW_REF_TAGS);
+}
+function enterApp(){
+  enterAppChrome();
   managerScreen="hub";
-  // expand all my store groups by default
   myStoreIds().forEach(id=>openGroups[id]=true);
   render();
   startPoll();
 }
-function logout(){SESSION=null;stopPoll();location.reload()}
+function logout(){SESSION=null;REAL_SESSION=null;clearSession();stopPoll();location.reload()}
+/* ---- session persistence (stay logged in across refresh) ----
+   Stores email + role password locally and silently re-resolves against the
+   live master on load. We persist the password because identity is verified
+   against the master each time; this matches the app's internal-tool model. */
+const SESS_KEY="dpm_maint_session";
+function saveSession(email,pw){try{localStorage.setItem(SESS_KEY,JSON.stringify({email,pw}))}catch(e){}}
+function clearSession(){try{localStorage.removeItem(SESS_KEY)}catch(e){}}
+async function tryRestoreSession(){
+  let saved;try{saved=JSON.parse(localStorage.getItem(SESS_KEY)||"null")}catch(e){saved=null}
+  if(!saved||!saved.email||!saved.pw)return false;
+  try{
+    await refresh();
+    const sess=resolveSession(saved.email,saved.pw);
+    if(sess.error){clearSession();return false}
+    SESSION=sess;enterApp();return true;
+  }catch(e){return false}
+}
 function startPoll(){stopPoll();pollTimer=setInterval(silentRefresh,POLL_MS);$("pollDot").classList.remove("hidden")}
 function stopPoll(){if(pollTimer)clearInterval(pollTimer);pollTimer=null}
 async function silentRefresh(){
@@ -469,11 +623,14 @@ function render(){
   applyTags();
 }
 
-/* ---- manager hub ---- */
+/* ---- manager hub: single action + their open tickets listed below ---- */
 function renderManagerHub(){
   const sid=SESSION.storeId, mine=ticketsForStore(sid);
-  const openN=mine.filter(t=>!["resolved","closed"].includes(t.status)).length;
+  const open=mine.filter(t=>ACTIVE_STATUSES.includes(t.status)).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
   const coach=storeCoach(sid), dir=storeDirector(sid), tech=storeTech(sid);
+  const cards=open.length
+    ? `<div class="sg-body" style="border:none;padding:0;margin-top:4px">${open.map(ticketCard).join("")}</div>`
+    : `<div class="empty" style="padding:40px 20px"><div class="empty-mark">✅</div><h3>No open tickets</h3><p>You're all clear. Use the button above to report a new issue.</p></div>`;
   return `
     <div class="page-head">
       <div>
@@ -484,18 +641,14 @@ function renderManagerHub(){
     <div class="sg-people" style="padding:0 0 16px">
       ${dir?`<span><b>Director:</b> ${esc(dir.name)}</span>`:""}
       ${coach?`<span><b>Coach:</b> ${esc(coach.name)}</span>`:""}
-      ${tech?`<span><b>Tech:</b> ${esc(tech.name)}</span>`:""}
+      ${tech?`<span><b>Tech:</b> ${esc(tech.name)}</span>`:`<span style="color:var(--ink-dim)">No tech assigned</span>`}
     </div>
-    <div class="hub">
-      <button class="hub-btn accent" onclick="openCreate('${sid}')">
-        <div class="hb-ic">📝</div><div class="hb-t">Report new issue</div>
-        <div class="hb-d">Open a maintenance ticket for your store. Add photos so the tech knows what they're walking into.</div>
-      </button>
-      <button class="hub-btn" onclick="managerScreen='list';render()">
-        <div class="hb-ic">📋</div><div class="hb-t">View existing tickets</div>
-        <div class="hb-d">${openN} open · ${mine.length} total. Track status from open through resolved.</div>
-      </button>
-    </div>`;
+    <button class="hub-btn accent" style="width:100%;margin-bottom:22px" onclick="openCreate('${sid}')">
+      <div class="hb-ic">📝</div><div class="hb-t">Report new issue</div>
+      <div class="hb-d">Open a maintenance ticket for your store. Add photos so the tech knows what they're walking into.</div>
+    </button>
+    <div class="section-label" style="margin-top:0">Your open tickets · ${open.length}<span class="ln"></span></div>
+    ${cards}`;
 }
 
 /* ---- board: stores first, then their tickets ---- */
@@ -504,10 +657,10 @@ function renderBoard(){
   // gather all tickets across my stores for stats + search
   let allTickets=[];
   storeIds.forEach(sid=>{allTickets=allTickets.concat(ticketsForStore(sid))});
-  const activeN=allTickets.filter(t=>!["resolved","closed"].includes(t.status)).length;
+  const activeN=allTickets.filter(t=>ACTIVE_STATUSES.includes(t.status)).length;
   const waitN=allTickets.filter(t=>t.status==="waiting").length;
   const finN=allTickets.filter(t=>t.status==="finished").length;
-  const doneN=allTickets.filter(t=>["resolved","closed"].includes(t.status)).length;
+  const doneN=allTickets.filter(t=>t.status==="closed").length;
 
   // header copy
   let title,meta;
@@ -527,16 +680,22 @@ function renderBoard(){
       </div>
     </div>
     <div class="statline">
-      ${stat(activeN,"Active","var(--amber)")}
-      ${stat(waitN,"Waiting","var(--s-waiting)")}
-      ${stat(finN,"Finished","var(--s-finished)")}
-      ${stat(doneN,"Closed","var(--s-closed)")}
+      ${stat("active",activeN,"Active","var(--amber)")}
+      ${stat("unassigned",allTickets.filter(t=>t.status==="unassigned").length,"Unassigned","var(--s-open)")}
+      ${stat("in_progress",allTickets.filter(t=>t.status==="in_progress").length,"In Progress","var(--s-progress)")}
+      ${stat("finished",allTickets.filter(t=>t.status==="finished").length,"Finished","var(--s-finished)")}
+      ${SESSION.role==="admin"?stat("closed",doneN,"Closed","var(--s-closed)"):""}
     </div>
     <div class="filters">
       ${chip("active","Active")}
-      ${SESSION.role==="tech"?chip("waiting","Waiting")+chip("finished","Finished"):""}
-      ${chip("done","Resolved / Closed")}
-      ${chip("all","All")}
+      ${chip("unassigned","Unassigned")}
+      ${chip("assigned","Vendor")}
+      ${chip("dispatched","Dispatched")}
+      ${chip("waiting","Waiting")}
+      ${chip("in_progress","In Progress")}
+      ${chip("finished","Finished")}
+      ${SESSION.role==="admin"?chip("closed","Closed"):""}
+      ${chip("all","All active")}
       <input class="input search" placeholder="Search store, issue, category…" value="${escA(curSearch)}" oninput="curSearch=this.value;render()">
     </div>`;
 
@@ -561,16 +720,16 @@ function renderBoard(){
   return head+groupsHtml+(canCreate()?`<button class="fab" onclick="openCreate()">＋ New</button>`:"");
 
   function chip(key,label){return `<button class="chip ${curFilter===key?"on":""}" onclick="curFilter='${key}';render()">${label}</button>`}
-  function stat(n,l,c){return `<div class="stat"><span class="bar" style="background:${c}"></span><div class="stat-n">${n}</div><div class="stat-l">${l}</div></div>`}
+  function stat(key,n,l,c){return `<button class="stat statbtn ${curFilter===key?"on":""}" onclick="curFilter='${key}';render()"><span class="bar" style="background:${c}"></span><div class="stat-n">${n}</div><div class="stat-l">${l}</div></button>`}
 }
 
 function applyFilterSearch(list){
   let out=list.slice();
-  if(curFilter==="active")out=out.filter(t=>!["resolved","closed"].includes(t.status));
-  else if(curFilter==="done")out=out.filter(t=>["resolved","closed"].includes(t.status));
-  else if(curFilter!=="all")out=out.filter(t=>t.status===curFilter);
+  if(curFilter==="active")out=out.filter(t=>ACTIVE_STATUSES.includes(t.status));
+  else if(curFilter==="all")out=out.filter(t=>SESSION.role==="admin"?true:t.status!=="closed");
+  else out=out.filter(t=>t.status===curFilter);
   if(curSearch){const q=curSearch.toLowerCase();
-    out=out.filter(t=>(t.description||"").toLowerCase().includes(q)||(CATEGORIES[t.category]||"").toLowerCase().includes(q))}
+    out=out.filter(t=>(t.description||"").toLowerCase().includes(q)||(CATEGORIES[t.category]||"").toLowerCase().includes(q)||(t.shortId||"").toLowerCase().includes(q))}
   out.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
   return out;
 }
@@ -578,7 +737,7 @@ function applyFilterSearch(list){
 function storeGroup(sid,list){
   const open=openGroups[sid]!==false;
   const coach=storeCoach(sid), dir=storeDirector(sid), tech=storeTech(sid);
-  const openN=ticketsForStore(sid).filter(t=>!["resolved","closed"].includes(t.status)).length;
+  const openN=ticketsForStore(sid).filter(t=>ACTIVE_STATUSES.includes(t.status)).length;
   const cards=list.length?list.map(ticketCard).join(""):`<div style="grid-column:1/-1;color:var(--ink-dim);font-size:13px;padding:6px 2px">No tickets for this store.</div>`;
   return `
     <div class="store-group">
@@ -694,7 +853,7 @@ async function submitTicket(){
     const ticket={
       shortId, storeId:sid,
       category:cat, priority:$("cPri").value, description:desc, photos:urls,
-      status:"open", assignedVendorId:null,
+      status:"unassigned", assignedVendorId:null, assignedTechId:null,
       createdBy:SESSION.email, createdByRole:SESSION.role, createdByName:SESSION.name,
       createdAt:now(), updatedAt:now(),
       activity:[{ts:now(),by:SESSION.name,role:SESSION.role,action:"created"}],
@@ -714,10 +873,11 @@ function openTicket(id){
   const st=STATUSES[t.status]||STATUSES.open;
   const sid=t.storeId;
   const dir=storeDirector(sid), coach=storeCoach(sid), tech=storeTech(sid);
-  // assignee: vendor frozen on ticket (explicit dispatch), else the store's LIVE tech
+  // assignee: explicit tech dispatch > vendor > store's live tech (default routing)
   let assignee=null;
-  if(t.assignedVendorId){const v=VENDORS[t.assignedVendorId];assignee=v?("🏢 "+v.name):"Vendor (removed)"}
-  else if(tech)assignee="🔧 "+tech.name;
+  if(t.assignedTechId){const n=techName(t.assignedTechId);assignee=n?("🔧 "+n+" (dispatched)"):"Tech (removed)"}
+  else if(t.assignedVendorId){const v=VENDORS[t.assignedVendorId];assignee=v?("🏢 "+v.name+" (vendor)"):"Vendor (removed)"}
+  else if(tech)assignee="🔧 "+tech.name+" (store tech)";
   const photos=(t.photos||[]).map(u=>`<img src="${escA(u)}" onclick="window.open('${escA(u)}','_blank')" alt="">`).join("");
   const activity=(t.activity||[]).slice().reverse().map(a=>`
     <div class="tl-item"><div class="tl-dot" style="background:${(STATUSES[a.toStatus]||{}).color||'var(--amber)'}"></div>
@@ -760,6 +920,7 @@ function actionText(a){
   if(a.action==="status")return`Status → ${(STATUSES[a.toStatus]||{}).label||a.toStatus}`;
   if(a.action==="assign")return`Assigned to ${a.note||"someone"}`;
   if(a.action==="clockin")return"Tech clocked in";
+  if(a.action==="clockout")return"Tech clocked out";
   if(a.action==="edit")return"Ticket details edited";
   return a.action;
 }
@@ -786,28 +947,49 @@ async function addComment(id){
   if(ok){toast("Comment posted");openTicket(id)}
   else{btn.disabled=false;btn.textContent="Post comment"}
 }
+/* ---- who can do what (new lifecycle) ----
+   unassigned -> (admin) assign to vendor=assigned, or to in-house tech=dispatched
+   waiting     -> rmtech or overwatch
+   in_progress -> tech clock-in, or anyone with store access (mgr/coach/dir/admin)
+   finished    -> any of those, or tech clock-out
+   closed      -> mgr/coach/dir/admin (vanishes from all views except overwatch)
+*/
+function hasStoreAccess(){return ["manager","coach","director","admin"].includes(SESSION.role)}
 function ticketControls(t){
-  let h="";const role=SESSION.role;
+  let h="";const role=SESSION.role, isClosed=t.status==="closed";
+
+  // ADMIN: full assign + status grid + edit + reopen
   if(role==="admin"){
-    h+=`<div class="section-label">Assign vendor<span class="ln"></span></div>${assignControls(t)}`;
+    h+=`<div class="section-label">Assign<span class="ln"></span></div>${assignControls(t)}`;
     h+=`<div class="section-label">Set status<span class="ln"></span></div>${statusGrid(t,STATUS_ORDER)}`;
     h+=`<button class="btn btn-ghost btn-block" style="margin-top:14px" onclick="openEdit('${t._id}')">✎ Edit ticket text / photos</button>`;
-  }else if(role==="director"||role==="coach"){
-    if(!["resolved","closed"].includes(t.status)){
-      h+=`<div class="section-label">Resolve<span class="ln"></span></div>
-        <div style="display:flex;gap:10px">
-          <button class="btn btn-primary" style="flex:1" onclick="setStatus('${t._id}','resolved')">Mark resolved</button>
-          <button class="btn btn-ghost" style="flex:1" onclick="setStatus('${t._id}','closed')">Close ticket</button></div>`;
-    }else{
-      h+=`<div class="section-label">Reopen<span class="ln"></span></div><button class="btn btn-ghost btn-block" onclick="setStatus('${t._id}','open')">Reopen ticket</button>`;
-    }
-  }else if(role==="tech"){
+    return h;
+  }
+
+  if(isClosed) return `<div class="section-label">Closed<span class="ln"></span></div><div style="color:var(--ink-dim);font-size:13px">This ticket is closed. Only Overwatch can reopen it.</div>`;
+
+  // TECH actions
+  if(role==="tech"){
     h+=`<div class="section-label">Job actions<span class="ln"></span></div><div style="display:flex;flex-direction:column;gap:9px">`;
-    if(!t.clockInAt)h+=`<button class="btn btn-primary btn-block" onclick="techClockIn('${t._id}')">⏱ Clock in & start</button>`;
+    if(!t.clockInAt) h+=`<button class="btn btn-primary btn-block" onclick="techClockIn('${t._id}')">⏱ Clock in &amp; start</button>`;
     else h+=`<div class="detail-row" style="border:none;padding-top:0"><span class="k">Clocked in</span><span class="v">${fmtDate(t.clockInAt)}</span></div>`;
-    if(t.status!=="waiting")h+=`<button class="btn btn-ghost btn-block" onclick="openWaiting('${t._id}')">⏸ Set to waiting…</button>`;
-    if(t.status!=="finished")h+=`<button class="btn btn-primary btn-block" style="background:var(--green);border-color:#0f9c6e;color:#04231a" onclick="techFinish('${t._id}')">✓ Mark finished</button>`;
+    if(t.status!=="waiting") h+=`<button class="btn btn-ghost btn-block" onclick="openWaiting('${t._id}')">⏸ Set to waiting…</button>`;
+    if(t.status!=="finished") h+=`<button class="btn btn-primary btn-block fin" onclick="techFinish('${t._id}')">✓ Clock out &amp; mark finished</button>`;
     h+=`</div>`;
+    return h;
+  }
+
+  // STORE-ACCESS people (manager / coach / director): progress, finish, close
+  if(hasStoreAccess()){
+    h+=`<div class="section-label">Update job<span class="ln"></span></div><div style="display:flex;flex-direction:column;gap:9px">`;
+    if(t.status!=="in_progress" && t.status!=="finished")
+      h+=`<button class="btn btn-ghost btn-block" onclick="setStatus('${t._id}','in_progress')">▶ Mark in progress</button>`;
+    // waiting allowed for overwatch+tech per spec; managers/coaches/directors skip it
+    if(t.status!=="finished")
+      h+=`<button class="btn btn-primary btn-block fin" onclick="setStatus('${t._id}','finished')">✓ Mark finished</button>`;
+    h+=`<button class="btn btn-danger btn-block" onclick="setStatus('${t._id}','closed')">✕ Close ticket</button>`;
+    h+=`</div><div style="font-size:11px;color:var(--ink-dim);margin-top:8px">Closing removes the ticket from all views except Overwatch (kept for reporting).</div>`;
+    return h;
   }
   return h;
 }
@@ -817,11 +999,17 @@ function statusGrid(t,targets){
 }
 function assignControls(t){
   const vendors=Object.entries(VENDORS);
-  const venOpts=vendors.map(([id,v])=>`<option value="${id}"${t.assignedVendorId===id?" selected":""}>🏢 ${esc(v.name)}</option>`).join("");
+  const techs=Object.entries(MASTER.repairTechnicians||{});
+  const venOpts=vendors.map(([id,v])=>`<option value="vendor:${id}"${t.assignedVendorId===id?" selected":""}>🏢 ${esc(v.name)}</option>`).join("");
+  const techOpts=techs.map(([id,v])=>`<option value="tech:${id}"${t.assignedTechId===id?" selected":""}>🔧 ${esc(v.name)}</option>`).join("");
   return `<div style="display:flex;gap:10px">
-    <select class="input" id="assignSel"><option value="">— Store's tech (default) —</option>${venOpts||'<option disabled>No vendors added</option>'}</select>
+    <select class="input" id="assignSel">
+      <option value="">— Unassigned (pool) —</option>
+      <optgroup label="In-house techs → Dispatched">${techOpts||'<option disabled>None</option>'}</optgroup>
+      <optgroup label="Third-party vendors → Assigned">${venOpts||'<option disabled>No vendors added</option>'}</optgroup>
+    </select>
     <button class="btn btn-primary" onclick="doAssign('${t._id}')">Set</button></div>
-    <div style="font-size:11px;color:var(--ink-dim);margin-top:7px">Leave on default to route to the store's currently-assigned tech (from the master). Pick a vendor to dispatch to a third party.</div>`;
+    <div style="font-size:11px;color:var(--ink-dim);margin-top:7px">In-house tech → status becomes <b>Dispatched</b>. Third-party vendor → status becomes <b>Assigned</b>.</div>`;
 }
 
 /* ============================================================ MUTATIONS */
@@ -839,17 +1027,18 @@ async function setStatus(id,status){
   if(await patchTicket(id,{status},{action:"status",toStatus:status})){toast(`Status → ${STATUSES[status].label}`);openTicket(id)}
 }
 async function doAssign(id){
-  const vid=$("assignSel").value;
+  const val=$("assignSel").value;
   let patch,note;
-  if(vid){patch={assignedVendorId:vid};note=VENDORS[vid]?.name||"vendor";if(TICKETS[id].status==="open")patch.status="assigned"}
-  else{patch={assignedVendorId:null};note="store tech (default)"}
-  if(await patchTicket(id,patch,{action:"assign",note})){toast("Assignment updated");openTicket(id)}
+  if(val.startsWith("tech:")){const tid=val.slice(5);patch={assignedTechId:tid,assignedVendorId:null,status:"dispatched"};note="🔧 "+(techName(tid)||"tech")}
+  else if(val.startsWith("vendor:")){const vid=val.slice(7);patch={assignedVendorId:vid,assignedTechId:null,status:"assigned"};note="🏢 "+(VENDORS[vid]?.name||"vendor")}
+  else{patch={assignedVendorId:null,assignedTechId:null,status:"unassigned"};note="unassigned (pool)"}
+  if(await patchTicket(id,patch,{action:"assign",note,toStatus:patch.status})){toast("Assignment updated");openTicket(id)}
 }
 async function techClockIn(id){
-  if(await patchTicket(id,{clockInAt:now(),status:"in_progress"},{action:"clockin"})){toast("Clocked in");openTicket(id)}
+  if(await patchTicket(id,{clockInAt:now(),status:"in_progress"},{action:"clockin",toStatus:"in_progress"})){toast("Clocked in");openTicket(id)}
 }
 async function techFinish(id){
-  if(await patchTicket(id,{status:"finished",finishedAt:now()},{action:"status",toStatus:"finished"})){toast("Marked finished");openTicket(id)}
+  if(await patchTicket(id,{status:"finished",finishedAt:now(),clockOutAt:now()},{action:"clockout",toStatus:"finished"})){toast("Clocked out · finished");openTicket(id)}
 }
 function openWaiting(id){
   const opts=WAITING_REASONS.map(r=>`<option value="${escA(r)}">${esc(r)}</option>`).join("");
@@ -941,21 +1130,48 @@ async function removeVendor(id){
 }
 
 /* ============================================================ REFERENCE TAG SYSTEM
-   Stamps an always-on corner badge (o/d/a/r/m + sequential number) on
-   every visible element in the current view. Remove later by setting
-   SHOW_REF_TAGS=false at the top, or via the # button. Numbering resets
-   each render and walks the DOM in document order.
+   Always-on corner badges (o/d/a/r/m + number) for pointing at controls.
+   STABLE numbering: each logical element gets a number from its signature
+   (tag + trimmed text + onclick), stored in a registry per role, so a given
+   control keeps the same tag no matter how many tickets are on screen.
+   Data-dependent, movable elements (ticket cards and their children, store
+   groups, comments, activity, photos) are SKIPPED so numbers never drift.
+   Default OFF; toggle with the # button in the top bar.
    ============================================================ */
+let tagRegistry={};   // role -> { signature -> number }
+let tagCounter={};    // role -> next number
+function sigOf(el){
+  const tag=el.tagName.toLowerCase();
+  const oc=(el.getAttribute&&el.getAttribute("onclick")||"").replace(/['"][^'"]*['"]/g,"·").slice(0,40);
+  const id=el.id?("#"+el.id):"";
+  let txt=(el.getAttribute&&el.getAttribute("data-label"))||"";
+  if(!txt){ // first text node only, trimmed, capped — stable-ish label
+    txt=([...el.childNodes].find(n=>n.nodeType===3)?.textContent||"").trim().slice(0,24);
+  }
+  return `${tag}|${id}|${txt}|${oc}`;
+}
+// elements whose subtree we never tag (data-driven / movable)
+function isSkippable(el){
+  return el.classList&&(
+    el.classList.contains("tk")||           // ticket card
+    el.classList.contains("store-group")||  // store accordion (varies with stores)
+    el.classList.contains("cmt")||          // a comment
+    el.classList.contains("tl-item")||      // activity row
+    el.classList.contains("photo-grid")||   // photos
+    el.classList.contains("tk-photos")||
+    el.classList.contains("preview-strip")||
+    el.classList.contains("reftag")
+  );
+}
 function applyTags(){
   if(!SESSION) return;
-  // clear old
   document.querySelectorAll(".reftag").forEach(n=>n.remove());
   document.querySelectorAll("[data-reftagged]").forEach(n=>n.removeAttribute("data-reftagged"));
   if(!SHOW_REF_TAGS){document.body.classList.add("no-reftags");return}
   document.body.classList.remove("no-reftags");
-  const prefix=ROLE_PREFIX[SESSION.role]||"x";
-  let n=0;
-  // roots to tag: the app chrome + main view + any open modal
+  const role=SESSION.role, prefix=ROLE_PREFIX[role]||"x";
+  if(!tagRegistry[role]){tagRegistry[role]={};tagCounter[role]=0}
+  const reg=tagRegistry[role];
   const roots=[$("topbar"),$("mainView")];
   const ov=$("modalOverlay"); if(ov&&ov.classList.contains("on"))roots.push(ov);
   roots.forEach(root=>{if(root)walk(root)});
@@ -970,25 +1186,27 @@ function applyTags(){
   }
   function walk(el){
     [...el.children].forEach(child=>{
+      if(isSkippable(child))return; // skip data-driven subtrees entirely
       if(visible(child)){
-        n++;
+        const sig=sigOf(child);
+        let num=reg[sig];
+        if(num===undefined){num=++tagCounter[role];reg[sig]=num}
         child.setAttribute("data-reftagged","");
         const tag=document.createElement("span");
-        tag.className="reftag";
-        tag.textContent=prefix+n;
+        tag.className="reftag";tag.textContent=prefix+num;
         child.appendChild(tag);
       }
-      // recurse regardless (so children of untagged wrappers still get tagged)
-      if(child.children&&child.children.length&&!(child.classList&&child.classList.contains("reftag")))walk(child);
+      if(child.children&&child.children.length)walk(child);
     });
   }
 }
-function toggleTags(){SHOW_REF_TAGS=!SHOW_REF_TAGS;applyTags();toast(SHOW_REF_TAGS?"Reference tags on":"Reference tags off")}
+function toggleTags(){SHOW_REF_TAGS=!SHOW_REF_TAGS;applyTags();toast(SHOW_REF_TAGS?"Reference tags ON":"Reference tags OFF")}
 
 /* ============================================================ BOOT */
 (function init(){
   ["emailIn","pwIn"].forEach(id=>document.getElementById(id).addEventListener("keydown",e=>{if(e.key==="Enter")doLogin()}));
   window.addEventListener("resize",()=>{if(SESSION)applyTags()});
+  tryRestoreSession(); // stay logged in across refresh
 })();
 </script>
 </body>
