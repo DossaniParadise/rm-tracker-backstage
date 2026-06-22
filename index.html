@@ -1,0 +1,928 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Dossani Maintenance</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800;900&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* LIGHT MODE — slate/charcoal ink on light surfaces, amber accent preserved */
+  --ground:#f1f3f7; --panel:#ffffff; --panel-2:#f5f7fa;
+  --line:#dde2ea; --line-soft:#e8ecf2;
+  --ink:#1a2230; --ink-mid:#51607a; --ink-dim:#8a96a8;
+  --amber:#f59e0b; --amber-deep:#b45309;
+  --blue:#2563eb; --green:#059669; --red:#dc2626; --violet:#7c3aed; --cyan:#0891b2;
+  --s-open:#2563eb; --s-assigned:#7c3aed; --s-progress:#0891b2; --s-waiting:#d97706;
+  --s-finished:#059669; --s-resolved:#047857; --s-closed:#8a96a8;
+  --radius:10px; --radius-sm:7px; --shadow:0 8px 26px rgba(40,55,80,.12);
+  --mono:'JetBrains Mono',ui-monospace,monospace;
+  --disp:'Archivo',system-ui,sans-serif; --body:'Inter',system-ui,sans-serif;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{background:var(--ground);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased;min-height:100vh}
+body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
+  background-image:linear-gradient(var(--line-soft) 1px,transparent 1px),linear-gradient(90deg,var(--line-soft) 1px,transparent 1px);
+  background-size:46px 46px;opacity:.6;mask-image:radial-gradient(ellipse 90% 70% at 50% 0%,#000 25%,transparent 100%)}
+button{font-family:inherit;cursor:pointer}
+input,select,textarea{font-family:inherit}
+.hidden{display:none!important}
+.mono{font-family:var(--mono)}
+
+/* ===== REFERENCE BADGE SYSTEM (remove later: set SHOW_REF_TAGS=false) ===== */
+.reftag{
+  position:absolute;top:-7px;left:-7px;z-index:5;
+  background:#ff2d7e;color:#fff;font-family:var(--mono);font-weight:700;
+  font-size:9px;line-height:1;padding:2px 4px;border-radius:4px;
+  pointer-events:none;letter-spacing:.02em;box-shadow:0 1px 3px rgba(0,0,0,.5);
+  opacity:.92;white-space:nowrap;
+}
+[data-reftagged]{position:relative}
+body.no-reftags .reftag{display:none}
+
+/* ===== TOPBAR ===== */
+.topbar{position:sticky;top:0;z-index:40;display:flex;align-items:center;gap:14px;padding:12px 18px;
+  background:rgba(255,255,255,.85);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:center;gap:11px;min-width:0}
+.brand-mark{width:34px;height:34px;border-radius:8px;flex-shrink:0;
+  background:repeating-linear-gradient(45deg,var(--amber) 0 6px,#fff4dd 6px 12px);border:1px solid var(--amber-deep);position:relative}
+.brand-mark::after{content:"";position:absolute;inset:5px;border-radius:3px;background:var(--ground)}
+.brand-name{font-family:var(--disp);font-weight:800;font-size:16px;letter-spacing:.02em;line-height:1.05}
+.brand-sub{font-family:var(--mono);font-size:10px;color:var(--ink-dim);letter-spacing:.14em;text-transform:uppercase}
+.topbar-spacer{flex:1}
+.who{display:flex;flex-direction:column;align-items:flex-end;line-height:1.2;text-align:right;min-width:0}
+.who-name{font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:42vw}
+.who-role{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--amber)}
+.icon-btn{background:var(--panel-2);border:1px solid var(--line);color:var(--ink-mid);width:38px;height:38px;border-radius:9px;font-size:15px;display:grid;place-items:center;transition:.15s}
+.icon-btn:hover{border-color:var(--amber);color:var(--amber)}
+
+.wrap{position:relative;z-index:1;max-width:1180px;margin:0 auto;padding:22px 18px 90px}
+
+/* ===== LOGIN ===== */
+.login-stage{position:relative;z-index:1;min-height:100vh;display:grid;place-items:center;padding:24px}
+.login-card{width:100%;max-width:420px;background:var(--panel);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);overflow:hidden}
+.login-head{padding:30px 30px 22px;border-bottom:1px solid var(--line-soft);background:radial-gradient(120% 80% at 0% 0%,rgba(255,176,0,.10),transparent 60%)}
+.login-mark{width:48px;height:48px;border-radius:11px;margin-bottom:18px;background:repeating-linear-gradient(45deg,var(--amber) 0 8px,#fff4dd 8px 16px);border:1px solid var(--amber-deep);position:relative}
+.login-mark::after{content:"";position:absolute;inset:7px;border-radius:4px;background:var(--panel)}
+.login-title{font-family:var(--disp);font-weight:900;font-size:26px;letter-spacing:-.01em;line-height:1.05}
+.login-tag{color:var(--ink-dim);font-size:13px;margin-top:6px;font-family:var(--mono);letter-spacing:.04em}
+.login-body{padding:24px 30px 30px;display:flex;flex-direction:column;gap:16px}
+.field{display:flex;flex-direction:column;gap:7px}
+.label{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-mid)}
+.input{background:var(--panel-2);border:1px solid var(--line);border-radius:9px;padding:13px 14px;color:var(--ink);font-size:15px;width:100%;transition:.15s}
+.input:focus{outline:none;border-color:var(--amber);box-shadow:0 0 0 3px rgba(255,176,0,.12)}
+.input::placeholder{color:var(--ink-dim)}
+.btn{border:1px solid transparent;border-radius:9px;padding:13px 18px;font-weight:600;font-size:15px;display:inline-flex;align-items:center;justify-content:center;gap:8px;transition:.15s;white-space:nowrap}
+.btn-primary{background:var(--amber);color:#1a1305;border-color:var(--amber-deep);font-weight:700}
+.btn-primary:hover{background:#ffbe2e}
+.btn-primary:disabled{opacity:.55;cursor:not-allowed}
+.btn-ghost{background:var(--panel-2);color:var(--ink);border-color:var(--line)}
+.btn-ghost:hover{border-color:var(--amber);color:var(--amber)}
+.btn-danger{background:transparent;color:var(--red);border-color:rgba(248,113,113,.4)}
+.btn-danger:hover{background:rgba(248,113,113,.12)}
+.btn-sm{padding:8px 12px;font-size:13px;border-radius:7px}
+.btn-block{width:100%}
+.login-err{background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.35);color:#fca5a5;border-radius:8px;padding:11px 13px;font-size:13px}
+.login-foot{font-size:11px;color:var(--ink-dim);text-align:center;font-family:var(--mono);letter-spacing:.06em;padding-top:4px}
+
+/* ===== PAGE HEAD / STATS / FILTERS ===== */
+.page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:20px;flex-wrap:wrap}
+.page-title{font-family:var(--disp);font-weight:900;font-size:26px;letter-spacing:-.01em;line-height:1.05}
+.page-meta{font-family:var(--mono);font-size:11px;color:var(--ink-dim);letter-spacing:.1em;text-transform:uppercase;margin-top:5px}
+.head-actions{display:flex;gap:10px;flex-wrap:wrap}
+.statline{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px}
+.stat{flex:1;min-width:96px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;position:relative;overflow:hidden}
+.stat .bar{position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--amber)}
+.stat-n{font-family:var(--disp);font-weight:800;font-size:24px;line-height:1}
+.stat-l{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-dim);margin-top:6px}
+.filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px;align-items:center}
+.chip{background:var(--panel);border:1px solid var(--line);color:var(--ink-mid);padding:7px 13px;border-radius:20px;font-size:13px;font-weight:500;transition:.13s}
+.chip:hover{border-color:var(--ink-dim);color:var(--ink)}
+.chip.on{background:var(--amber);color:#1a1305;border-color:var(--amber-deep);font-weight:700}
+.search{flex:1;min-width:180px}
+
+/* ===== STORE GROUPS ===== */
+.store-group{margin-bottom:18px;border:1px solid var(--line);border-radius:13px;overflow:hidden;background:var(--panel)}
+.sg-head{display:flex;align-items:center;gap:12px;padding:14px 16px;cursor:pointer;transition:.13s;background:var(--panel-2)}
+.sg-head:hover{background:#eef1f6}
+.sg-chev{color:var(--ink-dim);font-size:13px;transition:.2s;width:14px}
+.sg-head.open .sg-chev{transform:rotate(90deg)}
+.sg-name{font-weight:700;font-size:15px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sg-num{font-family:var(--mono);font-size:11px;color:var(--amber);letter-spacing:.04em}
+.sg-count{font-family:var(--mono);font-size:11px;color:var(--ink-mid);background:var(--ground);border:1px solid var(--line);padding:3px 9px;border-radius:20px}
+.sg-people{display:flex;gap:10px;flex-wrap:wrap;padding:0 16px 12px;font-size:11px;color:var(--ink-dim)}
+.sg-people span b{color:var(--ink-mid);font-weight:600}
+.sg-body{padding:12px 16px 16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;border-top:1px solid var(--line-soft)}
+.sg-actions{padding:12px 16px;border-top:1px solid var(--line-soft);display:flex;gap:10px}
+
+/* ===== TICKET CARDS ===== */
+.tk{background:var(--ground);border:1px solid var(--line);border-radius:11px;overflow:hidden;transition:.15s;cursor:pointer;display:flex;flex-direction:column}
+.tk:hover{border-color:var(--ink-dim);transform:translateY(-2px);box-shadow:var(--shadow)}
+.tk-top{display:flex;align-items:center;gap:9px;padding:12px 14px 0}
+.tk-id{font-family:var(--mono);font-size:11px;color:var(--ink-dim)}
+.tk-top-spacer{flex:1}
+.sbadge{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:4px 9px;border-radius:6px;display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.sbadge .dot{width:6px;height:6px;border-radius:50%;background:currentColor}
+.tk-body{padding:9px 14px 13px;flex:1;display:flex;flex-direction:column}
+.tk-desc{color:var(--ink-mid);font-size:13.5px;margin:0 0 11px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;flex:1}
+.tk-foot{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:auto}
+.tag{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;padding:3px 8px;border-radius:5px;background:var(--panel-2);border:1px solid var(--line-soft);color:var(--ink-mid)}
+.tag.cat{color:var(--violet);border-color:rgba(167,139,250,.3)}
+.tag.pri-high{color:var(--red);border-color:rgba(248,113,113,.35)}
+.tag.pri-urgent{color:#fff;background:var(--red);border-color:var(--red)}
+.tk-photos{display:flex;gap:5px;margin-top:9px}
+.tk-photos img{width:32px;height:32px;border-radius:6px;object-fit:cover;border:1px solid var(--line)}
+
+.empty{text-align:center;padding:54px 20px;color:var(--ink-dim);border:1px dashed var(--line);border-radius:14px;background:rgba(255,255,255,.01)}
+.empty-mark{font-size:34px;margin-bottom:12px;opacity:.5}
+.empty h3{font-family:var(--disp);font-weight:700;color:var(--ink-mid);margin:0 0 6px;font-size:18px}
+.empty p{margin:0;font-size:14px}
+
+/* manager hub */
+.hub{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:24px}
+.hub-btn{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:26px 22px;text-align:left;transition:.15s;display:flex;flex-direction:column;gap:8px}
+.hub-btn:hover{border-color:var(--amber);transform:translateY(-2px);box-shadow:var(--shadow)}
+.hub-btn .hb-ic{font-size:26px;margin-bottom:4px}
+.hub-btn .hb-t{font-family:var(--disp);font-weight:800;font-size:17px}
+.hub-btn .hb-d{font-size:13px;color:var(--ink-dim);line-height:1.4}
+.hub-btn.accent{background:linear-gradient(135deg,rgba(255,176,0,.12),transparent 70%);border-color:var(--amber-deep)}
+
+/* ===== MODAL ===== */
+.overlay{position:fixed;inset:0;z-index:60;background:rgba(26,34,48,.45);backdrop-filter:blur(4px);display:flex;align-items:flex-end;justify-content:center;opacity:0;pointer-events:none;transition:.2s}
+.overlay.on{opacity:1;pointer-events:auto}
+@media(min-width:640px){.overlay{align-items:center;padding:24px}}
+.sheet{background:var(--panel);border:1px solid var(--line);width:100%;max-width:560px;max-height:92vh;overflow-y:auto;border-radius:18px 18px 0 0;transform:translateY(20px);transition:.25s}
+.overlay.on .sheet{transform:translateY(0)}
+@media(min-width:640px){.sheet{border-radius:16px}}
+.sheet-head{position:sticky;top:0;z-index:2;background:var(--panel);display:flex;align-items:center;gap:12px;padding:18px 20px;border-bottom:1px solid var(--line-soft)}
+.sheet-head h2{font-family:var(--disp);font-weight:800;font-size:19px;margin:0;flex:1}
+.sheet-body{padding:20px}
+.sheet-foot{position:sticky;bottom:0;background:var(--panel);border-top:1px solid var(--line-soft);padding:14px 20px;display:flex;gap:10px}
+.x-btn{background:var(--panel-2);border:1px solid var(--line);color:var(--ink-mid);width:34px;height:34px;border-radius:8px;font-size:16px;display:grid;place-items:center}
+.x-btn:hover{color:var(--ink)}
+.detail-row{display:flex;justify-content:space-between;gap:14px;padding:11px 0;border-bottom:1px solid var(--line-soft);font-size:14px}
+.detail-row .k{color:var(--ink-dim);font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap;padding-top:2px}
+.detail-row .v{text-align:right;color:var(--ink)}
+.detail-desc{background:var(--panel-2);border:1px solid var(--line-soft);border-radius:9px;padding:13px 15px;font-size:14px;color:var(--ink-mid);line-height:1.55;margin:4px 0 16px}
+.photo-grid{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 18px}
+.photo-grid img{width:84px;height:84px;border-radius:9px;object-fit:cover;border:1px solid var(--line);cursor:pointer}
+.timeline{margin:6px 0 4px;padding-left:4px}
+.tl-item{display:flex;gap:11px;padding:8px 0;font-size:13px}
+.tl-dot{width:9px;height:9px;border-radius:50%;background:var(--amber);margin-top:5px;flex-shrink:0;box-shadow:0 0 0 3px rgba(255,176,0,.15)}
+.tl-c .tl-act{font-weight:600;color:var(--ink)}
+.tl-c .tl-meta{color:var(--ink-dim);font-size:11px;font-family:var(--mono);margin-top:2px}
+.tl-c .tl-note{color:var(--ink-mid);font-size:13px;margin-top:3px}
+.section-label{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-dim);margin:20px 0 10px;display:flex;align-items:center;gap:8px}
+.section-label .ln{flex:1;height:1px;background:var(--line-soft)}
+.status-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;margin-bottom:6px}
+.status-opt{border:1px solid var(--line);background:var(--panel-2);border-radius:8px;padding:10px;font-size:12px;font-weight:600;display:flex;align-items:center;gap:7px;transition:.13s;text-align:left}
+.status-opt:hover{border-color:var(--ink-dim)}
+.status-opt.cur{border-color:var(--amber);background:rgba(255,176,0,.08)}
+.status-opt .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.upload-zone{border:1.5px dashed var(--line);border-radius:11px;padding:18px;text-align:center;color:var(--ink-dim);transition:.15s;cursor:pointer;background:var(--panel-2)}
+.upload-zone:hover{border-color:var(--amber);color:var(--amber)}
+.upload-zone .uz-ic{font-size:24px;margin-bottom:6px}
+.upload-zone .uz-t{font-size:13px;font-weight:600}
+.upload-zone .uz-h{font-size:11px;margin-top:3px;font-family:var(--mono)}
+.preview-strip{display:flex;gap:7px;flex-wrap:wrap;margin-top:11px}
+.preview-strip .pv{position:relative}
+.preview-strip img{width:52px;height:52px;border-radius:8px;object-fit:cover;border:1px solid var(--line)}
+.preview-strip .pv-x{position:absolute;top:-5px;right:-5px;background:var(--red);color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:10px;line-height:1;display:grid;place-items:center}
+textarea.input{resize:vertical;min-height:90px;line-height:1.5}
+select.input{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%236b7686' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center;padding-right:36px}
+.vrow{display:flex;align-items:center;gap:12px;padding:13px 0;border-bottom:1px solid var(--line-soft)}
+.vrow:last-child{border:none}
+.vrow .v-name{font-weight:600;flex:1;min-width:0}
+.vrow .v-meta{font-size:11px;color:var(--ink-dim);font-family:var(--mono)}
+
+.toast{position:fixed;left:50%;bottom:26px;transform:translate(-50%,30px);z-index:80;background:var(--panel-2);border:1px solid var(--line);color:var(--ink);padding:12px 18px;border-radius:10px;font-size:14px;font-weight:500;box-shadow:var(--shadow);opacity:0;transition:.25s;max-width:90vw;display:flex;align-items:center;gap:9px}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+.toast.ok{border-color:rgba(52,211,153,.4)}
+.toast.err{border-color:rgba(248,113,113,.4)}
+.fab{position:fixed;right:20px;bottom:22px;z-index:50;background:var(--amber);color:#1a1305;border:1px solid var(--amber-deep);border-radius:14px;padding:14px 18px;font-weight:700;font-size:15px;display:flex;align-items:center;gap:9px;box-shadow:var(--shadow)}
+.fab:hover{background:#ffbe2e}
+.loader{position:fixed;inset:0;z-index:90;display:grid;place-items:center;background:var(--ground)}
+.spin{width:30px;height:30px;border:3px solid var(--line);border-top-color:var(--amber);border-radius:50%;animation:sp .7s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.inline-spin{width:15px;height:15px;border:2px solid rgba(0,0,0,.25);border-top-color:#1a1305;border-radius:50%;animation:sp .7s linear infinite;display:inline-block}
+.poll-dot{position:fixed;left:14px;bottom:14px;z-index:50;font-family:var(--mono);font-size:10px;color:var(--ink-dim);display:flex;align-items:center;gap:6px}
+.poll-dot .d{width:6px;height:6px;border-radius:50%;background:var(--green)}
+.poll-dot.busy .d{background:var(--amber)}
+@media(max-width:560px){.wrap{padding:18px 14px 90px}.page-title{font-size:22px}.hub{grid-template-columns:1fr}.sg-body{grid-template-columns:1fr}.detail-row .v{max-width:55vw}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+
+<!-- ===================== LOGIN ===================== -->
+<div class="login-stage" id="loginStage">
+  <div class="login-card">
+    <div class="login-head">
+      <div class="login-mark"></div>
+      <div class="login-title">Maintenance</div>
+      <div class="login-tag">Dossani Paradise · dispatch</div>
+    </div>
+    <div class="login-body">
+      <div class="login-err hidden" id="loginErr"></div>
+      <div class="field">
+        <label class="label" for="emailIn">Work email</label>
+        <input class="input" id="emailIn" type="email" autocomplete="username" placeholder="you@dossaniparadise.com" autocapitalize="off" spellcheck="false">
+      </div>
+      <div class="field">
+        <label class="label" for="pwIn">Role password</label>
+        <input class="input" id="pwIn" type="password" autocomplete="current-password" placeholder="••••••••">
+      </div>
+      <button class="btn btn-primary btn-block" id="loginBtn" onclick="doLogin()">Sign in</button>
+      <div class="login-foot">Reads live from the alignment master</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== APP ===================== -->
+<div id="app" class="hidden">
+  <div class="topbar" id="topbar">
+    <div class="brand">
+      <div class="brand-mark"></div>
+      <div>
+        <div class="brand-name">Maintenance</div>
+        <div class="brand-sub" id="brandSub">Dispatch Console</div>
+      </div>
+    </div>
+    <div class="topbar-spacer"></div>
+    <div class="who">
+      <div class="who-name" id="whoName">—</div>
+      <div class="who-role" id="whoRole">—</div>
+    </div>
+    <button class="icon-btn" id="refreshBtn" title="Refresh now" onclick="manualRefresh()">⟳</button>
+    <button class="icon-btn hidden" id="vendorTopBtn" title="Approved vendors" onclick="openVendors()">🏢</button>
+    <button class="icon-btn" id="tagToggle" title="Toggle reference tags" onclick="toggleTags()">#</button>
+    <button class="icon-btn" title="Sign out" onclick="logout()">⏻</button>
+  </div>
+  <div class="wrap" id="mainView"></div>
+</div>
+
+<div class="poll-dot hidden" id="pollDot"><span class="d"></span><span id="pollTxt">live</span></div>
+<div class="toast" id="toast"></div>
+<div class="loader hidden" id="loader"><div class="spin"></div></div>
+
+<script>
+/* ============================================================
+   CONFIG — satellite app. No Firebase SDK. Reads/writes via the
+   alignment API. The store location is the immutable anchor for a
+   ticket; coach/director/tech are resolved LIVE from the master.
+   ============================================================ */
+const API_BASE_URL = "https://alignment-api-khaki.vercel.app/api/dpm-alignment";
+const APP_WRITE_PASSWORD = "maint-76051"; // must match ROLES.MAINTENANCE on the API
+const IMGBB_API_KEY = "b733862d15744e2bfaa4329d122f4ba0";
+const POLL_MS = 20000;
+let   SHOW_REF_TAGS = true; // ← set false (or use the # button) to hide reference badges
+
+const ROLE_PASSWORDS = {
+  admin:"Overwatch@76051", director:"DO@76051", coach:"AC@76051", manager:"Dossani@76051", tech:"Repair@76051",
+};
+const ADMIN_EMAILS = ["itsupport@dossaniparadise.com","rahim@dossaniparadise.com"];
+const TICKETS_NODE = "maintenanceTickets";
+const VENDORS_NODE = "maintenanceVendors";
+
+const STATUSES = {
+  open:{label:"Open",color:"var(--s-open)"}, assigned:{label:"Assigned",color:"var(--s-assigned)"},
+  in_progress:{label:"In Progress",color:"var(--s-progress)"}, waiting:{label:"Waiting",color:"var(--s-waiting)"},
+  finished:{label:"Finished",color:"var(--s-finished)"}, resolved:{label:"Resolved",color:"var(--s-resolved)"},
+  closed:{label:"Closed",color:"var(--s-closed)"},
+};
+const STATUS_ORDER = ["open","assigned","in_progress","waiting","finished","resolved","closed"];
+const CATEGORIES = {plumbing:"Plumbing",equipment:"Equipment",hvac:"HVAC",electrical:"Electrical",it:"IT / POS",structural:"Structural",safety:"Safety",other:"Other"};
+const PRIORITIES = {low:"Low",normal:"Normal",high:"High",urgent:"Urgent"};
+const WAITING_REASONS = ["Awaiting parts","Awaiting vendor","Awaiting approval","Awaiting access","Scheduled — future date","Other"];
+const ROLE_LABEL = {admin:"Overwatch",director:"Director",coach:"Area Coach",manager:"Store Manager",tech:"Repair Tech"};
+const ROLE_PREFIX = {admin:"o",director:"d",coach:"a",tech:"r",manager:"m"};
+
+/* ============================================================ STATE */
+let MASTER=null, SESSION=null;
+let TICKETS={}, VENDORS={}, RESTAURANTS={};
+let curFilter="active", curSearch="";
+let openGroups={};          // storeId -> bool (expanded)
+let managerScreen="hub";
+let pollTimer=null;
+
+/* ============================================================ API */
+async function apiGet(){
+  const r=await fetch(API_BASE_URL,{cache:"no-store"});
+  if(!r.ok) throw new Error("Could not reach the alignment master");
+  return await r.json();
+}
+async function apiWrite(path,payload){
+  const updates={}; updates[path]=payload;
+  const r=await fetch(API_BASE_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:APP_WRITE_PASSWORD,updates})});
+  if(!r.ok){let m="Write failed";try{m=(await r.json()).error||m}catch(e){}throw new Error(m)}
+}
+async function refresh(){
+  MASTER=await apiGet();
+  RESTAURANTS=MASTER.restaurants||{};
+  TICKETS=MASTER[TICKETS_NODE]||{};
+  VENDORS=MASTER[VENDORS_NODE]||{};
+}
+
+/* ============================================================ IMGBB */
+async function uploadPhoto(file){
+  const fd=new FormData();fd.append("image",file);
+  const r=await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`,{method:"POST",body:fd});
+  const j=await r.json();
+  if(!j.success)throw new Error(j.error?.message||"Photo upload failed");
+  return j.data.url;
+}
+
+/* ============================================================ HELPERS */
+const $=id=>document.getElementById(id);
+function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+function escA(s){return String(s??"").replace(/"/g,"&quot;")}
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
+function now(){return Date.now()}
+function fmtDate(ts){if(!ts)return"—";const d=new Date(ts);return d.toLocaleDateString("en-US",{month:"short",day:"numeric"})+" · "+d.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"})}
+function timeAgo(ts){if(!ts)return"";const s=Math.floor((now()-ts)/1000);if(s<60)return"just now";const m=Math.floor(s/60);if(m<60)return m+"m ago";const h=Math.floor(m/60);if(h<24)return h+"h ago";return Math.floor(h/24)+"d ago"}
+function toast(msg,type="ok"){const t=$("toast");t.textContent=msg;t.className="toast "+type+" show";clearTimeout(t._t);t._t=setTimeout(()=>t.className="toast",2800)}
+function showLoader(b){$("loader").classList.toggle("hidden",!b)}
+
+/* ---- store + LIVE relationship lookups (the store is the anchor) ---- */
+function store(rid){return RESTAURANTS[rid]||{}}
+function storeName(rid){return store(rid).storeName||"Unknown store"}
+function storeNum(rid){return store(rid).storeNumber||""}
+function storeDirector(rid){const id=store(rid).assignedDirectorId;return (MASTER.directors||{})[id]||null}
+function storeCoach(rid){const id=store(rid).assignedAreaCoachId;return (MASTER.areaCoaches||{})[id]||null}
+function storeTech(rid){const id=store(rid).assignedRepairTechnicianId;return (MASTER.repairTechnicians||{})[id]||null}
+function storeManagerName(rid){return store(rid).storeManager||""}
+
+/* ============================================================ LOGIN */
+async function doLogin(){
+  const email=$("emailIn").value.trim().toLowerCase(), pw=$("pwIn").value, errEl=$("loginErr");
+  errEl.classList.add("hidden");
+  if(!email||!pw)return showErr("Enter your email and password.");
+  const btn=$("loginBtn");btn.disabled=true;btn.innerHTML='<span class="inline-spin"></span> Checking…';
+  try{
+    await refresh();
+    const sess=resolveSession(email,pw);
+    if(sess.error){btn.disabled=false;btn.textContent="Sign in";return showErr(sess.error)}
+    SESSION=sess; enterApp();
+  }catch(e){showErr(e.message||"Something went wrong.");btn.disabled=false;btn.textContent="Sign in"}
+  function showErr(m){errEl.textContent=m;errEl.classList.remove("hidden")}
+}
+function resolveSession(email,pw){
+  const lc=email.toLowerCase(), me=(o,id)=>(o[id]?.email||"").toLowerCase()===lc;
+  const admins=MASTER.admins||{};
+  if(ADMIN_EMAILS.includes(lc)||Object.keys(admins).some(id=>me(admins,id))){
+    if(pw!==ROLE_PASSWORDS.admin)return{error:"That password doesn't match the admin role."};
+    const a=Object.values(admins).find(x=>(x.email||"").toLowerCase()===lc);
+    return{email:lc,role:"admin",name:a?.name||"Administrator",scope:"all"};
+  }
+  const dirs=MASTER.directors||{}, dId=Object.keys(dirs).find(id=>me(dirs,id));
+  if(dId){if(pw!==ROLE_PASSWORDS.director)return{error:"That password doesn't match the director role."};
+    return{email:lc,role:"director",name:dirs[dId].name,scope:"stores",refField:"assignedDirectorId",refId:dId}}
+  const co=MASTER.areaCoaches||{}, cId=Object.keys(co).find(id=>me(co,id));
+  if(cId){if(pw!==ROLE_PASSWORDS.coach)return{error:"That password doesn't match the area coach role."};
+    return{email:lc,role:"coach",name:co[cId].name,scope:"stores",refField:"assignedAreaCoachId",refId:cId}}
+  const te=MASTER.repairTechnicians||{}, tId=Object.keys(te).find(id=>me(te,id));
+  if(tId){if(pw!==ROLE_PASSWORDS.tech)return{error:"That password doesn't match the technician role."};
+    return{email:lc,role:"tech",name:te[tId].name,scope:"stores",refField:"assignedRepairTechnicianId",refId:tId}}
+  const sId=Object.keys(RESTAURANTS).find(r=>(RESTAURANTS[r].email||"").toLowerCase()===lc);
+  if(sId){if(pw!==ROLE_PASSWORDS.manager)return{error:"That password doesn't match the store role."};
+    return{email:lc,role:"manager",name:RESTAURANTS[sId].storeManager||storeName(sId),scope:"single",storeId:sId}}
+  return{error:"We couldn't find that email in the alignment master. Check it's the email on file."};
+}
+
+/* ============================================================ SCOPING (store-anchored, computed live) */
+function myStoreIds(){
+  if(!SESSION) return [];
+  if(SESSION.scope==="all") return Object.keys(RESTAURANTS);
+  if(SESSION.scope==="single") return [SESSION.storeId];
+  // director/coach/tech: all stores whose live assignment field === my id
+  return Object.keys(RESTAURANTS).filter(r=>RESTAURANTS[r][SESSION.refField]===SESSION.refId);
+}
+function ticketsForStore(sid){
+  return Object.keys(TICKETS).map(k=>({_id:k,...TICKETS[k]})).filter(t=>t.storeId===sid);
+}
+
+/* ============================================================ PERMISSIONS */
+function canCreate(){return SESSION.role!=="tech"}
+function canManageVendors(){return SESSION.role==="admin"}
+function canEditContent(){return SESSION.role==="admin"}
+function canAssign(){return SESSION.role==="admin"}
+
+/* ============================================================ ENTER / POLL */
+function enterApp(){
+  $("loginStage").classList.add("hidden");
+  $("app").classList.remove("hidden");
+  $("whoName").textContent=SESSION.name;
+  $("whoRole").textContent=ROLE_LABEL[SESSION.role];
+  $("brandSub").textContent=ROLE_LABEL[SESSION.role]+" Console";
+  $("vendorTopBtn").classList.toggle("hidden",!canManageVendors());
+  document.body.classList.toggle("no-reftags",!SHOW_REF_TAGS);
+  managerScreen="hub";
+  // expand all my store groups by default
+  myStoreIds().forEach(id=>openGroups[id]=true);
+  render();
+  startPoll();
+}
+function logout(){SESSION=null;stopPoll();location.reload()}
+function startPoll(){stopPoll();pollTimer=setInterval(silentRefresh,POLL_MS);$("pollDot").classList.remove("hidden")}
+function stopPoll(){if(pollTimer)clearInterval(pollTimer);pollTimer=null}
+async function silentRefresh(){
+  const dot=$("pollDot");dot.classList.add("busy");$("pollTxt").textContent="syncing";
+  try{await refresh();if(!$("modalOverlay")||!$("modalOverlay").classList.contains("on"))render()}catch(e){}
+  dot.classList.remove("busy");$("pollTxt").textContent="live";
+}
+async function manualRefresh(){const b=$("refreshBtn");b.style.transform="rotate(360deg)";await silentRefresh();setTimeout(()=>b.style.transform="",300);toast("Refreshed")}
+
+/* ============================================================ RENDER ROOT */
+function render(){
+  const v=$("mainView");
+  if(SESSION.role==="manager"&&managerScreen==="hub"){v.innerHTML=renderManagerHub();applyTags();return}
+  v.innerHTML=renderBoard();
+  applyTags();
+}
+
+/* ---- manager hub ---- */
+function renderManagerHub(){
+  const sid=SESSION.storeId, mine=ticketsForStore(sid);
+  const openN=mine.filter(t=>!["resolved","closed"].includes(t.status)).length;
+  const coach=storeCoach(sid), dir=storeDirector(sid), tech=storeTech(sid);
+  return `
+    <div class="page-head">
+      <div>
+        <div class="page-title">${esc(storeName(sid))}</div>
+        <div class="page-meta">${esc(storeNum(sid))} · ${esc(SESSION.name)}</div>
+      </div>
+    </div>
+    <div class="sg-people" style="padding:0 0 16px">
+      ${dir?`<span><b>Director:</b> ${esc(dir.name)}</span>`:""}
+      ${coach?`<span><b>Coach:</b> ${esc(coach.name)}</span>`:""}
+      ${tech?`<span><b>Tech:</b> ${esc(tech.name)}</span>`:""}
+    </div>
+    <div class="hub">
+      <button class="hub-btn accent" onclick="openCreate('${sid}')">
+        <div class="hb-ic">📝</div><div class="hb-t">Report new issue</div>
+        <div class="hb-d">Open a maintenance ticket for your store. Add photos so the tech knows what they're walking into.</div>
+      </button>
+      <button class="hub-btn" onclick="managerScreen='list';render()">
+        <div class="hb-ic">📋</div><div class="hb-t">View existing tickets</div>
+        <div class="hb-d">${openN} open · ${mine.length} total. Track status from open through resolved.</div>
+      </button>
+    </div>`;
+}
+
+/* ---- board: stores first, then their tickets ---- */
+function renderBoard(){
+  const storeIds=myStoreIds();
+  // gather all tickets across my stores for stats + search
+  let allTickets=[];
+  storeIds.forEach(sid=>{allTickets=allTickets.concat(ticketsForStore(sid))});
+  const activeN=allTickets.filter(t=>!["resolved","closed"].includes(t.status)).length;
+  const waitN=allTickets.filter(t=>t.status==="waiting").length;
+  const finN=allTickets.filter(t=>t.status==="finished").length;
+  const doneN=allTickets.filter(t=>["resolved","closed"].includes(t.status)).length;
+
+  // header copy
+  let title,meta;
+  if(SESSION.role==="tech"){title="My dispatched stores";meta=`${esc(SESSION.name)} · ${storeIds.length} stores · ${allTickets.length} tickets`}
+  else if(SESSION.role==="admin"){title="All stores";meta=`${storeIds.length} locations · overwatch`}
+  else if(SESSION.role==="manager"){title=storeName(SESSION.storeId);meta=storeNum(SESSION.storeId)}
+  else{title=ROLE_LABEL[SESSION.role]+" board";meta=`${storeIds.length} stores in your area`}
+
+  const backBtn=(SESSION.role==="manager")?`<button class="btn btn-ghost btn-sm" onclick="managerScreen='hub';render()">← Back</button>`:"";
+
+  const head=`
+    <div class="page-head">
+      <div><div class="page-title">${esc(title)}</div><div class="page-meta">${esc(meta)}</div></div>
+      <div class="head-actions">
+        ${backBtn}
+        ${canCreate()?`<button class="btn btn-primary btn-sm" onclick="openCreate()">＋ New ticket</button>`:""}
+      </div>
+    </div>
+    <div class="statline">
+      ${stat(activeN,"Active","var(--amber)")}
+      ${stat(waitN,"Waiting","var(--s-waiting)")}
+      ${stat(finN,"Finished","var(--s-finished)")}
+      ${stat(doneN,"Closed","var(--s-closed)")}
+    </div>
+    <div class="filters">
+      ${chip("active","Active")}
+      ${SESSION.role==="tech"?chip("waiting","Waiting")+chip("finished","Finished"):""}
+      ${chip("done","Resolved / Closed")}
+      ${chip("all","All")}
+      <input class="input search" placeholder="Search store, issue, category…" value="${escA(curSearch)}" oninput="curSearch=this.value;render()">
+    </div>`;
+
+  if(!storeIds.length){
+    return head+`<div class="empty"><div class="empty-mark">🏪</div><h3>No stores assigned to you</h3><p>Your assignments are managed in the alignment master.</p></div>`;
+  }
+
+  // sort stores by name; only show groups that have tickets matching the filter (unless manager/empty allowance)
+  const sortedStores=storeIds.slice().sort((a,b)=>storeName(a).localeCompare(storeName(b)));
+  let groupsHtml="", anyShown=false;
+  sortedStores.forEach(sid=>{
+    let list=ticketsForStore(sid);
+    list=applyFilterSearch(list);
+    if(!list.length && (curFilter!=="all"||curSearch)) return; // hide empty groups when filtering
+    anyShown=true;
+    groupsHtml+=storeGroup(sid,list);
+  });
+  if(!anyShown){
+    groupsHtml=`<div class="empty"><div class="empty-mark">🗂️</div><h3>Nothing matches</h3><p>${curSearch?"No tickets match your search.":"No tickets in this filter."}</p></div>`;
+  }
+
+  return head+groupsHtml+(canCreate()?`<button class="fab" onclick="openCreate()">＋ New</button>`:"");
+
+  function chip(key,label){return `<button class="chip ${curFilter===key?"on":""}" onclick="curFilter='${key}';render()">${label}</button>`}
+  function stat(n,l,c){return `<div class="stat"><span class="bar" style="background:${c}"></span><div class="stat-n">${n}</div><div class="stat-l">${l}</div></div>`}
+}
+
+function applyFilterSearch(list){
+  let out=list.slice();
+  if(curFilter==="active")out=out.filter(t=>!["resolved","closed"].includes(t.status));
+  else if(curFilter==="done")out=out.filter(t=>["resolved","closed"].includes(t.status));
+  else if(curFilter!=="all")out=out.filter(t=>t.status===curFilter);
+  if(curSearch){const q=curSearch.toLowerCase();
+    out=out.filter(t=>(t.description||"").toLowerCase().includes(q)||(CATEGORIES[t.category]||"").toLowerCase().includes(q))}
+  out.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+  return out;
+}
+
+function storeGroup(sid,list){
+  const open=openGroups[sid]!==false;
+  const coach=storeCoach(sid), dir=storeDirector(sid), tech=storeTech(sid);
+  const openN=ticketsForStore(sid).filter(t=>!["resolved","closed"].includes(t.status)).length;
+  const cards=list.length?list.map(ticketCard).join(""):`<div style="grid-column:1/-1;color:var(--ink-dim);font-size:13px;padding:6px 2px">No tickets for this store.</div>`;
+  return `
+    <div class="store-group">
+      <div class="sg-head ${open?"open":""}" onclick="toggleGroup('${sid}')">
+        <span class="sg-chev">▶</span>
+        <span class="sg-name">${esc(storeName(sid))}</span>
+        <span class="sg-num mono">${esc(storeNum(sid))}</span>
+        <span class="sg-count mono">${openN} open</span>
+      </div>
+      <div class="sg-people">
+        ${dir?`<span><b>Dir:</b> ${esc(dir.name)}</span>`:""}
+        ${coach?`<span><b>Coach:</b> ${esc(coach.name)}</span>`:""}
+        ${tech?`<span><b>Tech:</b> ${esc(tech.name)}</span>`:`<span style="color:var(--ink-dim)">No tech assigned</span>`}
+      </div>
+      ${open?`<div class="sg-body">${cards}</div>
+        ${canCreate()?`<div class="sg-actions"><button class="btn btn-ghost btn-sm" onclick="openCreate('${sid}')">＋ New ticket for this store</button></div>`:""}`:""}
+    </div>`;
+}
+function toggleGroup(sid){openGroups[sid]=openGroups[sid]===false?true:false;render()}
+
+function ticketCard(t){
+  const st=STATUSES[t.status]||STATUSES.open, cat=CATEGORIES[t.category]||"Other", pri=t.priority||"normal";
+  const priTag=(pri==="high"||pri==="urgent")?`<span class="tag pri-${pri}">${PRIORITIES[pri]}</span>`:"";
+  const photos=(t.photos||[]).slice(0,4).map(u=>`<img src="${escA(u)}" loading="lazy" alt="">`).join("");
+  return `
+    <div class="tk" onclick="openTicket('${t._id}')">
+      <div class="tk-top">
+        <span class="tk-id mono">#${esc(t.shortId||t._id.slice(0,6).toUpperCase())}</span>
+        <span class="tk-top-spacer"></span>
+        <span class="sbadge" style="color:${st.color};background:${st.color}1a"><span class="dot"></span>${st.label}</span>
+      </div>
+      <div class="tk-body">
+        <div class="tk-desc">${esc(t.description||"No description")}</div>
+        <div class="tk-foot">
+          <span class="tag cat">${cat}</span>${priTag}
+          <span class="tag" style="margin-left:auto">${timeAgo(t.createdAt)}</span>
+        </div>
+        ${photos?`<div class="tk-photos">${photos}</div>`:""}
+      </div>
+    </div>`;
+}
+
+/* ============================================================ MODAL */
+let activeModal=null;
+function modal(html){
+  let o=$("modalOverlay");
+  if(!o){o=document.createElement("div");o.id="modalOverlay";o.className="overlay";document.body.appendChild(o);o.addEventListener("click",e=>{if(e.target===o)closeModal()})}
+  o.innerHTML=`<div class="sheet">${html}</div>`;
+  requestAnimationFrame(()=>{o.classList.add("on");applyTags()});
+  activeModal=o;
+}
+function closeModal(){const o=$("modalOverlay");if(o){o.classList.remove("on");setTimeout(()=>{if(o)o.innerHTML=""},220)}activeModal=null}
+
+/* ============================================================ CREATE */
+let draftPhotos=[];
+function openCreate(preStore){
+  draftPhotos=[];
+  let ids = SESSION.role==="manager" ? [SESSION.storeId] : myStoreIds();
+  ids.sort((a,b)=>storeName(a).localeCompare(storeName(b)));
+  const storeOpts=ids.map(id=>`<option value="${id}"${preStore===id?" selected":""}>${esc(storeName(id))} (${esc(storeNum(id))})</option>`).join("");
+  const catOpts=Object.entries(CATEGORIES).map(([k,v])=>`<option value="${k}">${v}</option>`).join("");
+  const priOpts=Object.entries(PRIORITIES).map(([k,v])=>`<option value="${k}"${k==="normal"?" selected":""}>${v}</option>`).join("");
+  modal(`
+    <div class="sheet-head"><h2>Report new issue</h2><button class="x-btn" onclick="closeModal()">✕</button></div>
+    <div class="sheet-body">
+      <div class="field"><label class="label">Store</label>
+        <select class="input" id="cStore" ${ids.length===1?"disabled":""}>${storeOpts}</select></div>
+      <div style="display:flex;gap:12px;margin-top:14px">
+        <div class="field" style="flex:1"><label class="label">Category</label><select class="input" id="cCat">${catOpts}</select></div>
+        <div class="field" style="flex:1"><label class="label">Priority</label><select class="input" id="cPri">${priOpts}</select></div>
+      </div>
+      <div class="field" style="margin-top:14px"><label class="label">What's the issue?</label>
+        <textarea class="input" id="cDesc" placeholder="Describe the problem, location in the store, and anything the tech should know."></textarea></div>
+      <div class="field" style="margin-top:14px"><label class="label">Photos (optional)</label>
+        <div class="upload-zone" onclick="$('cFile').click()"><div class="uz-ic">📷</div><div class="uz-t">Add photos</div><div class="uz-h mono">tap to choose · up to 5</div></div>
+        <input type="file" id="cFile" accept="image/*" multiple style="display:none" onchange="addDraftPhotos(this)">
+        <div class="preview-strip" id="cPreview"></div></div>
+    </div>
+    <div class="sheet-foot">
+      <button class="btn btn-ghost" style="flex:1" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" style="flex:2" id="cSubmit" onclick="submitTicket()">Create ticket</button>
+    </div>`);
+  if(preStore&&$("cStore"))$("cStore").value=preStore;
+  else if(ids.length===1)$("cStore").value=ids[0];
+}
+function addDraftPhotos(input){
+  [...input.files].slice(0,5-draftPhotos.length).forEach(f=>{
+    if(f.size>10*1024*1024){toast("That photo is over 10MB","err");return}
+    draftPhotos.push({file:f,localUrl:URL.createObjectURL(f)})});
+  input.value="";renderDraftPreview();
+}
+function renderDraftPreview(){const el=$("cPreview");if(!el)return;
+  el.innerHTML=draftPhotos.map((p,i)=>`<div class="pv"><img src="${p.localUrl}" alt=""><button class="pv-x" onclick="draftPhotos.splice(${i},1);renderDraftPreview()">✕</button></div>`).join("");applyTags()}
+async function submitTicket(){
+  const sid=$("cStore").value, desc=$("cDesc").value.trim();
+  if(!desc){toast("Add a short description","err");return}
+  const btn=$("cSubmit");btn.disabled=true;btn.innerHTML='<span class="inline-spin"></span> Creating…';
+  try{
+    const urls=[];for(const p of draftPhotos)urls.push(await uploadPhoto(p.file));
+    const id=uid();
+    // NOTE: ticket stores ONLY storeId as its anchor. No coach/director/tech frozen on it.
+    const ticket={
+      shortId:id.slice(0,6).toUpperCase(), storeId:sid,
+      category:$("cCat").value, priority:$("cPri").value, description:desc, photos:urls,
+      status:"open", assignedVendorId:null,
+      createdBy:SESSION.email, createdByRole:SESSION.role, createdByName:SESSION.name,
+      createdAt:now(), updatedAt:now(),
+      activity:[{ts:now(),by:SESSION.name,role:SESSION.role,action:"created"}]
+    };
+    await apiWrite(`${TICKETS_NODE}/${id}`,ticket);
+    await refresh();closeModal();toast("Ticket created");
+    if(SESSION.role==="manager")managerScreen="list";
+    openGroups[sid]=true;render();
+  }catch(e){toast(e.message||"Could not create ticket","err");btn.disabled=false;btn.textContent="Create ticket"}
+}
+
+/* ============================================================ DETAIL */
+let editPhotos=null;
+function openTicket(id){
+  const t={_id:id,...TICKETS[id]};
+  const st=STATUSES[t.status]||STATUSES.open;
+  const sid=t.storeId;
+  const dir=storeDirector(sid), coach=storeCoach(sid), tech=storeTech(sid);
+  // assignee: vendor frozen on ticket (explicit dispatch), else the store's LIVE tech
+  let assignee=null;
+  if(t.assignedVendorId){const v=VENDORS[t.assignedVendorId];assignee=v?("🏢 "+v.name):"Vendor (removed)"}
+  else if(tech)assignee="🔧 "+tech.name;
+  const photos=(t.photos||[]).map(u=>`<img src="${escA(u)}" onclick="window.open('${escA(u)}','_blank')" alt="">`).join("");
+  const activity=(t.activity||[]).slice().reverse().map(a=>`
+    <div class="tl-item"><div class="tl-dot" style="background:${(STATUSES[a.toStatus]||{}).color||'var(--amber)'}"></div>
+      <div class="tl-c"><div class="tl-act">${esc(actionText(a))}</div>
+      <div class="tl-meta">${esc(a.by||"")} · ${fmtDate(a.ts)}</div>
+      ${a.note?`<div class="tl-note">"${esc(a.note)}"</div>`:""}</div></div>`).join("");
+  modal(`
+    <div class="sheet-head">
+      <h2>#${esc(t.shortId||id.slice(0,6).toUpperCase())}</h2>
+      <span class="sbadge" style="color:${st.color};background:${st.color}1a"><span class="dot"></span>${st.label}</span>
+      <button class="x-btn" onclick="closeModal()">✕</button>
+    </div>
+    <div class="sheet-body">
+      <div style="font-weight:700;font-size:17px">${esc(storeName(sid))}</div>
+      <div class="mono" style="color:var(--amber);font-size:12px;margin-bottom:14px">${esc(storeNum(sid))}</div>
+      <div class="detail-desc">${esc(t.description||"No description")}</div>
+      ${photos?`<div class="photo-grid">${photos}</div>`:""}
+      <div class="detail-row"><span class="k">Category</span><span class="v">${CATEGORIES[t.category]||"Other"}</span></div>
+      <div class="detail-row"><span class="k">Priority</span><span class="v">${PRIORITIES[t.priority]||"Normal"}</span></div>
+      <div class="detail-row"><span class="k">Assigned</span><span class="v">${assignee?esc(assignee):"<span style='color:var(--ink-dim)'>Unassigned</span>"}</span></div>
+      <div class="detail-row"><span class="k">Director</span><span class="v">${dir?esc(dir.name):"—"}</span></div>
+      <div class="detail-row"><span class="k">Area coach</span><span class="v">${coach?esc(coach.name):"—"}</span></div>
+      <div class="detail-row"><span class="k">Reported by</span><span class="v">${esc(t.createdByName||t.createdBy||"—")}</span></div>
+      <div class="detail-row"><span class="k">Opened</span><span class="v">${fmtDate(t.createdAt)}</span></div>
+      ${t.waitingReason?`<div class="detail-row"><span class="k">Waiting on</span><span class="v">${esc(t.waitingReason)}</span></div>`:""}
+      ${ticketControls(t)}
+      <div class="section-label">Activity<span class="ln"></span></div>
+      <div class="timeline">${activity||'<div style="color:var(--ink-dim);font-size:13px">No activity yet.</div>'}</div>
+    </div>
+    <div class="sheet-foot"><button class="btn btn-ghost btn-block" onclick="closeModal()">Close</button></div>`);
+}
+function actionText(a){
+  if(a.action==="created")return"Ticket created";
+  if(a.action==="status")return`Status → ${(STATUSES[a.toStatus]||{}).label||a.toStatus}`;
+  if(a.action==="assign")return`Assigned to ${a.note||"someone"}`;
+  if(a.action==="clockin")return"Tech clocked in";
+  if(a.action==="edit")return"Ticket details edited";
+  return a.action;
+}
+function ticketControls(t){
+  let h="";const role=SESSION.role;
+  if(role==="admin"){
+    h+=`<div class="section-label">Assign vendor<span class="ln"></span></div>${assignControls(t)}`;
+    h+=`<div class="section-label">Set status<span class="ln"></span></div>${statusGrid(t,STATUS_ORDER)}`;
+    h+=`<button class="btn btn-ghost btn-block" style="margin-top:14px" onclick="openEdit('${t._id}')">✎ Edit ticket text / photos</button>`;
+  }else if(role==="director"||role==="coach"){
+    if(!["resolved","closed"].includes(t.status)){
+      h+=`<div class="section-label">Resolve<span class="ln"></span></div>
+        <div style="display:flex;gap:10px">
+          <button class="btn btn-primary" style="flex:1" onclick="setStatus('${t._id}','resolved')">Mark resolved</button>
+          <button class="btn btn-ghost" style="flex:1" onclick="setStatus('${t._id}','closed')">Close ticket</button></div>`;
+    }else{
+      h+=`<div class="section-label">Reopen<span class="ln"></span></div><button class="btn btn-ghost btn-block" onclick="setStatus('${t._id}','open')">Reopen ticket</button>`;
+    }
+  }else if(role==="tech"){
+    h+=`<div class="section-label">Job actions<span class="ln"></span></div><div style="display:flex;flex-direction:column;gap:9px">`;
+    if(!t.clockInAt)h+=`<button class="btn btn-primary btn-block" onclick="techClockIn('${t._id}')">⏱ Clock in & start</button>`;
+    else h+=`<div class="detail-row" style="border:none;padding-top:0"><span class="k">Clocked in</span><span class="v">${fmtDate(t.clockInAt)}</span></div>`;
+    if(t.status!=="waiting")h+=`<button class="btn btn-ghost btn-block" onclick="openWaiting('${t._id}')">⏸ Set to waiting…</button>`;
+    if(t.status!=="finished")h+=`<button class="btn btn-primary btn-block" style="background:var(--green);border-color:#0f9c6e;color:#04231a" onclick="techFinish('${t._id}')">✓ Mark finished</button>`;
+    h+=`</div>`;
+  }
+  return h;
+}
+function statusGrid(t,targets){
+  return `<div class="status-grid">${targets.map(s=>{const st=STATUSES[s];const cur=t.status===s?"cur":"";
+    return `<button class="status-opt ${cur}" onclick="setStatus('${t._id}','${s}')"><span class="dot" style="background:${st.color}"></span>${st.label}${cur?" ·":""}</button>`}).join("")}</div>`;
+}
+function assignControls(t){
+  const vendors=Object.entries(VENDORS);
+  const venOpts=vendors.map(([id,v])=>`<option value="${id}"${t.assignedVendorId===id?" selected":""}>🏢 ${esc(v.name)}</option>`).join("");
+  return `<div style="display:flex;gap:10px">
+    <select class="input" id="assignSel"><option value="">— Store's tech (default) —</option>${venOpts||'<option disabled>No vendors added</option>'}</select>
+    <button class="btn btn-primary" onclick="doAssign('${t._id}')">Set</button></div>
+    <div style="font-size:11px;color:var(--ink-dim);margin-top:7px">Leave on default to route to the store's currently-assigned tech (from the master). Pick a vendor to dispatch to a third party.</div>`;
+}
+
+/* ============================================================ MUTATIONS */
+async function patchTicket(id,patch,activityEntry){
+  const t=TICKETS[id];if(!t){toast("Ticket not found","err");return}
+  const activity=Array.isArray(t.activity)?t.activity.slice():[];
+  if(activityEntry)activity.push({ts:now(),by:SESSION.name,role:SESSION.role,...activityEntry});
+  const updated={...t,...patch,activity,updatedAt:now()};
+  showLoader(true);
+  try{await apiWrite(`${TICKETS_NODE}/${id}`,updated);await refresh();showLoader(false);return true}
+  catch(e){showLoader(false);toast(e.message||"Update failed","err");return false}
+}
+async function setStatus(id,status){
+  if(TICKETS[id].status===status){toast("Already in that status");return}
+  if(await patchTicket(id,{status},{action:"status",toStatus:status})){toast(`Status → ${STATUSES[status].label}`);openTicket(id)}
+}
+async function doAssign(id){
+  const vid=$("assignSel").value;
+  let patch,note;
+  if(vid){patch={assignedVendorId:vid};note=VENDORS[vid]?.name||"vendor";if(TICKETS[id].status==="open")patch.status="assigned"}
+  else{patch={assignedVendorId:null};note="store tech (default)"}
+  if(await patchTicket(id,patch,{action:"assign",note})){toast("Assignment updated");openTicket(id)}
+}
+async function techClockIn(id){
+  if(await patchTicket(id,{clockInAt:now(),status:"in_progress"},{action:"clockin"})){toast("Clocked in");openTicket(id)}
+}
+async function techFinish(id){
+  if(await patchTicket(id,{status:"finished",finishedAt:now()},{action:"status",toStatus:"finished"})){toast("Marked finished");openTicket(id)}
+}
+function openWaiting(id){
+  const opts=WAITING_REASONS.map(r=>`<option value="${escA(r)}">${esc(r)}</option>`).join("");
+  modal(`<div class="sheet-head"><h2>Set to waiting</h2><button class="x-btn" onclick="openTicket('${id}')">✕</button></div>
+    <div class="sheet-body">
+      <div class="field"><label class="label">Reason</label><select class="input" id="wReason">${opts}</select></div>
+      <div class="field" style="margin-top:14px"><label class="label">Note (optional)</label><textarea class="input" id="wNote" placeholder="e.g. part ordered, ETA Friday"></textarea></div>
+    </div>
+    <div class="sheet-foot"><button class="btn btn-ghost" style="flex:1" onclick="openTicket('${id}')">Cancel</button>
+      <button class="btn btn-primary" style="flex:1" onclick="confirmWaiting('${id}')">Set waiting</button></div>`);
+}
+async function confirmWaiting(id){
+  const reason=$("wReason").value, note=$("wNote").value.trim();
+  if(await patchTicket(id,{status:"waiting",waitingReason:reason},{action:"status",toStatus:"waiting",note:note?`${reason} — ${note}`:reason})){toast("Set to waiting");openTicket(id)}
+}
+function openEdit(id){
+  const t=TICKETS[id];editPhotos=(t.photos||[]).slice();
+  const catOpts=Object.entries(CATEGORIES).map(([k,v])=>`<option value="${k}"${t.category===k?" selected":""}>${v}</option>`).join("");
+  const priOpts=Object.entries(PRIORITIES).map(([k,v])=>`<option value="${k}"${t.priority===k?" selected":""}>${v}</option>`).join("");
+  modal(`<div class="sheet-head"><h2>Edit ticket</h2><button class="x-btn" onclick="openTicket('${id}')">✕</button></div>
+    <div class="sheet-body">
+      <div style="display:flex;gap:12px">
+        <div class="field" style="flex:1"><label class="label">Category</label><select class="input" id="eCat">${catOpts}</select></div>
+        <div class="field" style="flex:1"><label class="label">Priority</label><select class="input" id="ePri">${priOpts}</select></div></div>
+      <div class="field" style="margin-top:14px"><label class="label">Description</label><textarea class="input" id="eDesc">${esc(t.description||"")}</textarea></div>
+      <div class="field" style="margin-top:14px"><label class="label">Photos</label>
+        <div class="upload-zone" onclick="$('eFile').click()"><div class="uz-ic">📷</div><div class="uz-t">Add photos</div></div>
+        <input type="file" id="eFile" accept="image/*" multiple style="display:none" onchange="addEditPhotos(this)">
+        <div class="preview-strip" id="ePreview"></div></div>
+    </div>
+    <div class="sheet-foot"><button class="btn btn-ghost" style="flex:1" onclick="openTicket('${id}')">Cancel</button>
+      <button class="btn btn-primary" style="flex:1" id="eSave" onclick="saveEdit('${id}')">Save changes</button></div>`);
+  renderEditPreview();
+}
+function renderEditPreview(){const el=$("ePreview");if(!el)return;
+  el.innerHTML=editPhotos.map((u,i)=>`<div class="pv"><img src="${escA(u)}" alt=""><button class="pv-x" onclick="editPhotos.splice(${i},1);renderEditPreview()">✕</button></div>`).join("");applyTags()}
+async function addEditPhotos(input){
+  const files=[...input.files].slice(0,8-editPhotos.length);input.value="";
+  for(const f of files){if(f.size>10*1024*1024){toast("Photo over 10MB skipped","err");continue}
+    try{editPhotos.push(await uploadPhoto(f));renderEditPreview()}catch(e){toast("A photo failed to upload","err")}}
+}
+async function saveEdit(id){
+  const btn=$("eSave");btn.disabled=true;btn.innerHTML='<span class="inline-spin"></span> Saving…';
+  if(await patchTicket(id,{description:$("eDesc").value.trim(),category:$("eCat").value,priority:$("ePri").value,photos:editPhotos.slice()},{action:"edit"})){toast("Ticket updated");openTicket(id)}
+  else{btn.disabled=false;btn.textContent="Save changes"}
+}
+
+/* ============================================================ VENDORS */
+function openVendors(){
+  const rows=Object.entries(VENDORS).map(([id,v])=>`
+    <div class="vrow"><div style="flex:1;min-width:0">
+      <div class="v-name">${esc(v.name)}</div>
+      <div class="v-meta">${esc([v.category,v.phone,v.email].filter(Boolean).join(" · ")||"No contact on file")}</div></div>
+      <button class="btn btn-ghost btn-sm" onclick="editVendor('${id}')">Edit</button>
+      <button class="btn btn-danger btn-sm" onclick="removeVendor('${id}')">Remove</button></div>`).join("");
+  modal(`<div class="sheet-head"><h2>Approved vendors</h2><button class="x-btn" onclick="closeModal()">✕</button></div>
+    <div class="sheet-body">
+      <p style="color:var(--ink-dim);font-size:13px;margin-top:0">Third-party vendors available for ticket assignment.</p>
+      <div id="vendorRows">${rows||'<div class="empty" style="padding:34px"><div class="empty-mark">🏢</div><h3>No vendors yet</h3><p>Add your first approved vendor below.</p></div>'}</div>
+      <button class="btn btn-ghost btn-block" style="margin-top:14px" onclick="editVendor(null)">＋ Add vendor</button>
+    </div>
+    <div class="sheet-foot"><button class="btn btn-ghost btn-block" onclick="closeModal()">Done</button></div>`);
+}
+function editVendor(id){
+  const v=id?VENDORS[id]:{};
+  modal(`<div class="sheet-head"><h2>${id?"Edit vendor":"Add vendor"}</h2><button class="x-btn" onclick="openVendors()">✕</button></div>
+    <div class="sheet-body">
+      <div class="field"><label class="label">Vendor name</label><input class="input" id="vName" value="${escA(v.name||"")}" placeholder="e.g. Lone Star HVAC"></div>
+      <div class="field" style="margin-top:14px"><label class="label">Category / specialty</label><input class="input" id="vCat" value="${escA(v.category||"")}" placeholder="e.g. Refrigeration, Plumbing"></div>
+      <div style="display:flex;gap:12px;margin-top:14px">
+        <div class="field" style="flex:1"><label class="label">Phone</label><input class="input" id="vPhone" value="${escA(v.phone||"")}"></div>
+        <div class="field" style="flex:1"><label class="label">Email</label><input class="input" id="vEmail" value="${escA(v.email||"")}"></div></div>
+    </div>
+    <div class="sheet-foot"><button class="btn btn-ghost" style="flex:1" onclick="openVendors()">Cancel</button>
+      <button class="btn btn-primary" style="flex:1" id="vSave" onclick="saveVendor('${id||""}')">${id?"Save":"Add vendor"}</button></div>`);
+}
+async function saveVendor(id){
+  const name=$("vName").value.trim();if(!name){toast("Vendor name is required","err");return}
+  const vid=id||uid();
+  const rec={id:vid,name,category:$("vCat").value.trim(),phone:$("vPhone").value.trim(),email:$("vEmail").value.trim(),updatedAt:now()};
+  const btn=$("vSave");btn.disabled=true;btn.innerHTML='<span class="inline-spin"></span>';
+  try{await apiWrite(`${VENDORS_NODE}/${vid}`,rec);await refresh();toast(id?"Vendor updated":"Vendor added");openVendors()}
+  catch(e){toast(e.message||"Could not save vendor","err");btn.disabled=false;btn.textContent="Save"}
+}
+async function removeVendor(id){
+  if(!confirm("Remove this vendor? Tickets dispatched to them will fall back to the store's tech."))return;
+  try{await apiWrite(`${VENDORS_NODE}/${id}`,null);await refresh();toast("Vendor removed");openVendors()}
+  catch(e){toast(e.message||"Could not remove vendor","err")}
+}
+
+/* ============================================================ REFERENCE TAG SYSTEM
+   Stamps an always-on corner badge (o/d/a/r/m + sequential number) on
+   every visible element in the current view. Remove later by setting
+   SHOW_REF_TAGS=false at the top, or via the # button. Numbering resets
+   each render and walks the DOM in document order.
+   ============================================================ */
+function applyTags(){
+  if(!SESSION) return;
+  // clear old
+  document.querySelectorAll(".reftag").forEach(n=>n.remove());
+  document.querySelectorAll("[data-reftagged]").forEach(n=>n.removeAttribute("data-reftagged"));
+  if(!SHOW_REF_TAGS){document.body.classList.add("no-reftags");return}
+  document.body.classList.remove("no-reftags");
+  const prefix=ROLE_PREFIX[SESSION.role]||"x";
+  let n=0;
+  // roots to tag: the app chrome + main view + any open modal
+  const roots=[$("topbar"),$("mainView")];
+  const ov=$("modalOverlay"); if(ov&&ov.classList.contains("on"))roots.push(ov);
+  roots.forEach(root=>{if(root)walk(root)});
+  function visible(el){
+    if(!(el instanceof HTMLElement))return false;
+    if(el.classList&&el.classList.contains("reftag"))return false;
+    const r=el.getBoundingClientRect();
+    if(r.width<6||r.height<6)return false;
+    const cs=getComputedStyle(el);
+    if(cs.display==="none"||cs.visibility==="hidden"||cs.opacity==="0")return false;
+    return true;
+  }
+  function walk(el){
+    [...el.children].forEach(child=>{
+      if(visible(child)){
+        n++;
+        child.setAttribute("data-reftagged","");
+        const tag=document.createElement("span");
+        tag.className="reftag";
+        tag.textContent=prefix+n;
+        child.appendChild(tag);
+      }
+      // recurse regardless (so children of untagged wrappers still get tagged)
+      if(child.children&&child.children.length&&!(child.classList&&child.classList.contains("reftag")))walk(child);
+    });
+  }
+}
+function toggleTags(){SHOW_REF_TAGS=!SHOW_REF_TAGS;applyTags();toast(SHOW_REF_TAGS?"Reference tags on":"Reference tags off")}
+
+/* ============================================================ BOOT */
+(function init(){
+  ["emailIn","pwIn"].forEach(id=>document.getElementById(id).addEventListener("keydown",e=>{if(e.key==="Enter")doLogin()}));
+  window.addEventListener("resize",()=>{if(SESSION)applyTags()});
+})();
+</script>
+</body>
+</html>
