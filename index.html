@@ -175,6 +175,15 @@ body.no-reftags .reftag{display:none}
 .tl-c .tl-act{font-weight:600;color:var(--ink)}
 .tl-c .tl-meta{color:var(--ink-dim);font-size:11px;font-family:var(--mono);margin-top:2px}
 .tl-c .tl-note{color:var(--ink-mid);font-size:13px;margin-top:3px}
+.comments{display:flex;flex-direction:column;gap:9px;margin:4px 0 12px}
+.cmt{background:var(--panel-2);border:1px solid var(--line-soft);border-radius:9px;padding:10px 12px}
+.cmt-head{display:flex;align-items:baseline;gap:8px;margin-bottom:4px;flex-wrap:wrap}
+.cmt-who{font-weight:700;font-size:13px}
+.cmt-role{font-family:var(--mono);font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--amber);background:rgba(245,158,11,.12);padding:2px 6px;border-radius:4px}
+.cmt-time{font-size:10px;color:var(--ink-dim);margin-left:auto}
+.cmt-body{font-size:13.5px;color:var(--ink-mid);line-height:1.5;white-space:pre-wrap;word-break:break-word}
+.comment-add{display:flex;flex-direction:column;gap:8px;margin-bottom:8px}
+.comment-add .btn{align-self:flex-end}
 .section-label{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-dim);margin:20px 0 10px;display:flex;align-items:center;gap:8px}
 .section-label .ln{flex:1;height:1px;background:var(--line-soft)}
 .status-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;margin-bottom:6px}
@@ -295,6 +304,7 @@ const STATUSES = {
 };
 const STATUS_ORDER = ["open","assigned","in_progress","waiting","finished","resolved","closed"];
 const CATEGORIES = {plumbing:"Plumbing",equipment:"Equipment",hvac:"HVAC",electrical:"Electrical",it:"IT / POS",structural:"Structural",safety:"Safety",other:"Other"};
+const CAT_PREFIX = {plumbing:"PLM",equipment:"EQP",hvac:"HVC",electrical:"ELE",it:"IT",structural:"STR",safety:"SAF",other:"GEN"};
 const PRIORITIES = {low:"Low",normal:"Normal",high:"High",urgent:"Urgent"};
 const WAITING_REASONS = ["Awaiting parts","Awaiting vendor","Awaiting approval","Awaiting access","Scheduled — future date","Other"];
 const ROLE_LABEL = {admin:"Overwatch",director:"Director",coach:"Area Coach",manager:"Store Manager",tech:"Repair Tech"};
@@ -340,6 +350,22 @@ const $=id=>document.getElementById(id);
 function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
 function escA(s){return String(s??"").replace(/"/g,"&quot;")}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
+// Readable per-store, per-category sequential ID, e.g. 23086-PLM-0004.
+// No transactions on the API, so we scan existing tickets for the max sequence
+// and bump. Caller re-reads fresh right before this to minimize collision window.
+function nextShortId(sid,category){
+  const digits=String(storeNum(sid)).replace(/\D/g,"")||"00000";
+  const pfx=CAT_PREFIX[category]||"GEN";
+  const stem=`${digits}-${pfx}-`;
+  let max=0;
+  Object.values(TICKETS).forEach(t=>{
+    if(typeof t.shortId==="string" && t.shortId.startsWith(stem)){
+      const n=parseInt(t.shortId.slice(stem.length),10);
+      if(!isNaN(n)&&n>max)max=n;
+    }
+  });
+  return stem+String(max+1).padStart(4,"0");
+}
 function now(){return Date.now()}
 function fmtDate(ts){if(!ts)return"—";const d=new Date(ts);return d.toLocaleDateString("en-US",{month:"short",day:"numeric"})+" · "+d.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"})}
 function timeAgo(ts){if(!ts)return"";const s=Math.floor((now()-ts)/1000);if(s<60)return"just now";const m=Math.floor(s/60);if(m<60)return m+"m ago";const h=Math.floor(m/60);if(h<24)return h+"h ago";return Math.floor(h/24)+"d ago"}
@@ -649,21 +675,33 @@ function renderDraftPreview(){const el=$("cPreview");if(!el)return;
 async function submitTicket(){
   const sid=$("cStore").value, desc=$("cDesc").value.trim();
   if(!desc){toast("Add a short description","err");return}
+  const cat=$("cCat").value;
   const btn=$("cSubmit");btn.disabled=true;btn.innerHTML='<span class="inline-spin"></span> Creating…';
   try{
     const urls=[];for(const p of draftPhotos)urls.push(await uploadPhoto(p.file));
     const id=uid();
+    // Re-read fresh right before assigning the sequence number to shrink the
+    // collision window (no server transaction available).
+    await refresh();
+    let shortId=nextShortId(sid,cat);
+    const taken=new Set(Object.values(TICKETS).map(t=>t.shortId));
+    let guard=0;
+    while(taken.has(shortId)&&guard++<50){
+      const m=shortId.match(/-(\d+)$/);
+      shortId=shortId.replace(/-\d+$/,"-"+String(parseInt(m[1],10)+1).padStart(4,"0"));
+    }
     // NOTE: ticket stores ONLY storeId as its anchor. No coach/director/tech frozen on it.
     const ticket={
-      shortId:id.slice(0,6).toUpperCase(), storeId:sid,
-      category:$("cCat").value, priority:$("cPri").value, description:desc, photos:urls,
+      shortId, storeId:sid,
+      category:cat, priority:$("cPri").value, description:desc, photos:urls,
       status:"open", assignedVendorId:null,
       createdBy:SESSION.email, createdByRole:SESSION.role, createdByName:SESSION.name,
       createdAt:now(), updatedAt:now(),
-      activity:[{ts:now(),by:SESSION.name,role:SESSION.role,action:"created"}]
+      activity:[{ts:now(),by:SESSION.name,role:SESSION.role,action:"created"}],
+      comments:[]
     };
     await apiWrite(`${TICKETS_NODE}/${id}`,ticket);
-    await refresh();closeModal();toast("Ticket created");
+    await refresh();closeModal();toast("Ticket created · "+shortId);
     if(SESSION.role==="manager")managerScreen="list";
     openGroups[sid]=true;render();
   }catch(e){toast(e.message||"Could not create ticket","err");btn.disabled=false;btn.textContent="Create ticket"}
@@ -706,6 +744,12 @@ function openTicket(id){
       <div class="detail-row"><span class="k">Opened</span><span class="v">${fmtDate(t.createdAt)}</span></div>
       ${t.waitingReason?`<div class="detail-row"><span class="k">Waiting on</span><span class="v">${esc(t.waitingReason)}</span></div>`:""}
       ${ticketControls(t)}
+      <div class="section-label">Comments<span class="ln"></span></div>
+      <div class="comments" id="commentList">${renderComments(t)}</div>
+      <div class="comment-add">
+        <textarea class="input" id="cmtInput" placeholder="Add a comment for the team…" style="min-height:64px"></textarea>
+        <button class="btn btn-primary btn-sm" id="cmtSend" onclick="addComment('${id}')">Post comment</button>
+      </div>
       <div class="section-label">Activity<span class="ln"></span></div>
       <div class="timeline">${activity||'<div style="color:var(--ink-dim);font-size:13px">No activity yet.</div>'}</div>
     </div>
@@ -718,6 +762,29 @@ function actionText(a){
   if(a.action==="clockin")return"Tech clocked in";
   if(a.action==="edit")return"Ticket details edited";
   return a.action;
+}
+function renderComments(t){
+  const list=Array.isArray(t.comments)?t.comments:[];
+  if(!list.length)return '<div style="color:var(--ink-dim);font-size:13px;padding:2px 0 6px">No comments yet. Start the thread below.</div>';
+  return list.slice().sort((a,b)=>a.ts-b.ts).map(c=>`
+    <div class="cmt">
+      <div class="cmt-head"><span class="cmt-who">${esc(c.by)}</span>
+        <span class="cmt-role">${esc(ROLE_LABEL[c.role]||c.role||"")}</span>
+        <span class="cmt-time mono">${fmtDate(c.ts)}</span></div>
+      <div class="cmt-body">${esc(c.text)}</div>
+    </div>`).join("");
+}
+async function addComment(id){
+  const inp=$("cmtInput");if(!inp)return;
+  const text=inp.value.trim();
+  if(!text){toast("Write something first","err");return}
+  const btn=$("cmtSend");btn.disabled=true;btn.innerHTML='<span class="inline-spin"></span>';
+  const t=TICKETS[id];
+  const comments=Array.isArray(t.comments)?t.comments.slice():[];
+  comments.push({id:uid(),by:SESSION.name,role:SESSION.role,email:SESSION.email,text,ts:now()});
+  const ok=await patchTicket(id,{comments},null); // comment is its own log; no activity entry needed
+  if(ok){toast("Comment posted");openTicket(id)}
+  else{btn.disabled=false;btn.textContent="Post comment"}
 }
 function ticketControls(t){
   let h="";const role=SESSION.role;
