@@ -103,7 +103,10 @@ body.no-reftags .reftag{display:none}
 .statbtn.on{border-color:var(--amber);box-shadow:0 0 0 2px rgba(245,158,11,.15)}
 .stat-n{font-family:var(--disp);font-weight:800;font-size:24px;line-height:1}
 .stat-l{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-dim);margin-top:6px}
-.filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px;align-items:center}
+.filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.filter-bar{display:flex;align-items:flex-start;gap:12px;margin-bottom:12px}
+.filter-bar-label{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-dim);padding-top:9px;width:64px;flex-shrink:0;text-align:right}
+.loc-select{max-width:340px}
 .chip{background:var(--panel);border:1px solid var(--line);color:var(--ink-mid);padding:7px 13px;border-radius:20px;font-size:13px;font-weight:500;transition:.13s}
 .chip:hover{border-color:var(--ink-dim);color:var(--ink)}
 .chip.on{background:var(--amber);color:#1a1305;border-color:var(--amber-deep);font-weight:700}
@@ -216,8 +219,9 @@ select.input{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xml
 .va-list{display:flex;flex-direction:column;gap:6px;max-height:48vh;overflow-y:auto}
 .va-row{display:flex;align-items:center;gap:12px;padding:11px 13px;background:var(--panel-2);border:1px solid var(--line-soft);border-radius:9px;text-align:left;transition:.12s;font-family:inherit}
 .va-row:hover{border-color:var(--amber);background:#fff}
-.va-name{font-weight:600;font-size:14px;flex:1;min-width:0;color:var(--ink)}
-.va-role{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--amber)}
+.va-main{display:flex;flex-direction:column;gap:2px;min-width:0}
+.va-name{font-weight:600;font-size:14px;color:var(--ink)}
+.va-sub{font-size:11px;color:var(--ink-dim);font-family:var(--mono)}
 /* simulation frame: shrink the app into a centered, bordered window */
 body.simulating{padding-top:54px}
 body.simulating #app{
@@ -352,7 +356,7 @@ const ROLE_PREFIX = {admin:"o",director:"d",coach:"a",tech:"r",manager:"m"};
 /* ============================================================ STATE */
 let MASTER=null, SESSION=null;
 let TICKETS={}, VENDORS={}, RESTAURANTS={};
-let curFilter="active", curSearch="";
+let curFilter="active", curSearch="", curStore="all";
 let openGroups={};          // storeId -> bool (expanded)
 let managerScreen="hub";
 let pollTimer=null;
@@ -470,17 +474,23 @@ function buildImpersonatedSession(kind,id){
   if(kind==="manager"){const s=RESTAURANTS[id];return{email:(s.email||"").toLowerCase(),role:"manager",name:s.storeManager||storeName(id),scope:"single",storeId:id,_sim:true}}
   return null;
 }
-// flat, alphabetically-sorted roster of everyone an admin can view as
+// flat roster of everyone an admin can view as; managers labeled by store
 function viewAsRoster(){
   const list=[];
-  Object.entries(MASTER.directors||{}).forEach(([id,d])=>list.push({kind:"director",id,name:d.name,role:"Director"}));
-  Object.entries(MASTER.areaCoaches||{}).forEach(([id,c])=>list.push({kind:"coach",id,name:c.name,role:"Area Coach"}));
-  Object.entries(MASTER.repairTechnicians||{}).forEach(([id,t])=>list.push({kind:"tech",id,name:t.name,role:"Repair Tech"}));
+  Object.entries(MASTER.directors||{}).forEach(([id,d])=>list.push({kind:"director",id,primary:"Director — "+d.name,secondary:"",search:(d.name+" director").toLowerCase(),sortk:"1"+d.name}));
+  Object.entries(MASTER.areaCoaches||{}).forEach(([id,c])=>list.push({kind:"coach",id,primary:"Area Coach — "+c.name,secondary:"",search:(c.name+" area coach").toLowerCase(),sortk:"2"+c.name}));
+  Object.entries(MASTER.repairTechnicians||{}).forEach(([id,t])=>list.push({kind:"tech",id,primary:"Repair Tech — "+t.name,secondary:"",search:(t.name+" tech").toLowerCase(),sortk:"3"+t.name}));
   Object.keys(RESTAURANTS).forEach(id=>{
     const s=RESTAURANTS[id];
-    if(s.storeManager)list.push({kind:"manager",id,name:s.storeManager,role:"Manager · "+storeNum(id)});
+    const mgr=s.storeManager||"—";
+    list.push({kind:"manager",id,
+      primary:"Manager · "+storeNum(id),
+      secondary:storeName(id)+(s.storeManager?(" · "+s.storeManager):""),
+      search:[storeNum(id),storeName(id),s.storeManager,"manager store"].filter(Boolean).join(" ").toLowerCase(),
+      sortk:"4"+(storeNum(id)||"")});
   });
-  return list.sort((a,b)=>a.name.localeCompare(b.name));
+  // default order: directors, coaches, techs, then managers by store number
+  return list.sort((a,b)=>a.sortk.localeCompare(b.sortk,undefined,{numeric:true}));
 }
 function startViewAs(kind,id){
   const sim=buildImpersonatedSession(kind,id);
@@ -508,15 +518,14 @@ function returnToMyAccount(){
 function openViewAs(){
   const roster=viewAsRoster();
   const rowHtml=r=>`
-    <button class="va-row" data-name="${escA(r.name.toLowerCase())}" onclick="closeModal();startViewAs('${r.kind}','${r.id}')">
-      <span class="va-name">${esc(r.name)}</span>
-      <span class="va-role">${esc(r.role)}</span>
+    <button class="va-row" data-search="${escA(r.search)}" onclick="closeModal();startViewAs('${r.kind}','${r.id}')">
+      <span class="va-main"><span class="va-name">${esc(r.primary)}</span>${r.secondary?`<span class="va-sub">${esc(r.secondary)}</span>`:""}</span>
     </button>`;
   modal(`
     <div class="sheet-head"><h2>View as…</h2><button class="x-btn" onclick="closeModal()">✕</button></div>
     <div class="sheet-body">
-      <p style="color:var(--ink-dim);font-size:13px;margin-top:0">See the app exactly as this person sees it. You can return to your own account anytime.</p>
-      <input class="input" id="vaSearch" placeholder="Search by name…" oninput="filterViewAs(this.value)" style="margin-bottom:12px">
+      <p style="color:var(--ink-dim);font-size:13px;margin-top:0">See the app exactly as this person sees it. Search by store number, store name, or manager name.</p>
+      <input class="input" id="vaSearch" placeholder="Search store #, store name, or name…" oninput="filterViewAs(this.value)" style="margin-bottom:12px">
       <div class="va-list" id="vaList">${roster.map(rowHtml).join("")}</div>
     </div>
     <div class="sheet-foot"><button class="btn btn-ghost btn-block" onclick="closeModal()">Cancel</button></div>`);
@@ -524,7 +533,7 @@ function openViewAs(){
 function filterViewAs(q){
   q=(q||"").toLowerCase().trim();
   document.querySelectorAll("#vaList .va-row").forEach(row=>{
-    row.style.display = row.getAttribute("data-name").includes(q) ? "" : "none";
+    row.style.display = row.getAttribute("data-search").includes(q) ? "" : "none";
   });
 }
 function renderSimBanner(){
@@ -686,30 +695,45 @@ function renderBoard(){
       ${stat("finished",allTickets.filter(t=>t.status==="finished").length,"Finished","var(--s-finished)")}
       ${SESSION.role==="admin"?stat("closed",doneN,"Closed","var(--s-closed)"):""}
     </div>
-    <div class="filters">
-      ${chip("active","Active")}
-      ${chip("unassigned","Unassigned")}
-      ${chip("assigned","Vendor")}
-      ${chip("dispatched","Dispatched")}
-      ${chip("waiting","Waiting")}
-      ${chip("in_progress","In Progress")}
-      ${chip("finished","Finished")}
-      ${SESSION.role==="admin"?chip("closed","Closed"):""}
-      ${chip("all","All active")}
-      <input class="input search" placeholder="Search store, issue, category…" value="${escA(curSearch)}" oninput="curSearch=this.value;render()">
+    ${storeIds.length>1?`
+    <div class="filter-bar">
+      <span class="filter-bar-label">Location</span>
+      <select class="input loc-select" onchange="curStore=this.value;render()">
+        <option value="all"${curStore==="all"?" selected":""}>All locations (${storeIds.length})</option>
+        ${storeIds.slice().sort((a,b)=>storeName(a).localeCompare(storeName(b))).map(id=>`<option value="${id}"${curStore===id?" selected":""}>${esc(storeName(id))} — ${esc(storeNum(id))}</option>`).join("")}
+      </select>
+    </div>`:""}
+    <div class="filter-bar">
+      <span class="filter-bar-label">Status</span>
+      <div class="filters">
+        ${chip("active","Active")}
+        ${chip("unassigned","Unassigned")}
+        ${chip("assigned","Vendor")}
+        ${chip("dispatched","Dispatched")}
+        ${chip("waiting","Waiting")}
+        ${chip("in_progress","In Progress")}
+        ${chip("finished","Finished")}
+        ${SESSION.role==="admin"?chip("closed","Closed"):""}
+        ${chip("all","All active")}
+      </div>
+    </div>
+    <div class="filter-bar">
+      <span class="filter-bar-label">Search</span>
+      <input class="input search" placeholder="Search store, issue, ticket #, category…" value="${escA(curSearch)}" oninput="curSearch=this.value;render()">
     </div>`;
 
   if(!storeIds.length){
     return head+`<div class="empty"><div class="empty-mark">🏪</div><h3>No stores assigned to you</h3><p>Your assignments are managed in the alignment master.</p></div>`;
   }
 
-  // sort stores by name; only show groups that have tickets matching the filter (unless manager/empty allowance)
-  const sortedStores=storeIds.slice().sort((a,b)=>storeName(a).localeCompare(storeName(b)));
+  // sort stores by name; apply location filter; hide empty groups when status-filtering/searching
+  let sortedStores=storeIds.slice().sort((a,b)=>storeName(a).localeCompare(storeName(b)));
+  if(curStore!=="all") sortedStores=sortedStores.filter(id=>id===curStore);
   let groupsHtml="", anyShown=false;
   sortedStores.forEach(sid=>{
     let list=ticketsForStore(sid);
     list=applyFilterSearch(list);
-    if(!list.length && (curFilter!=="all"||curSearch)) return; // hide empty groups when filtering
+    if(!list.length && (curFilter!=="all"||curSearch) && curStore==="all") return; // hide empty groups when filtering across all
     anyShown=true;
     groupsHtml+=storeGroup(sid,list);
   });
@@ -753,7 +777,7 @@ function storeGroup(sid,list){
         ${tech?`<span><b>Tech:</b> ${esc(tech.name)}</span>`:`<span style="color:var(--ink-dim)">No tech assigned</span>`}
       </div>
       ${open?`<div class="sg-body">${cards}</div>
-        ${canCreate()?`<div class="sg-actions"><button class="btn btn-ghost btn-sm" onclick="openCreate('${sid}')">＋ New ticket for this store</button></div>`:""}`:""}
+        ${canCreate()&&SESSION.role!=="admin"?`<div class="sg-actions"><button class="btn btn-ghost btn-sm" onclick="openCreate('${sid}')">＋ New ticket for this store</button></div>`:""}`:""}
     </div>`;
 }
 function toggleGroup(sid){openGroups[sid]=openGroups[sid]===false?true:false;render()}
@@ -1019,7 +1043,7 @@ async function patchTicket(id,patch,activityEntry){
   if(activityEntry)activity.push({ts:now(),by:SESSION.name,role:SESSION.role,...activityEntry});
   const updated={...t,...patch,activity,updatedAt:now()};
   showLoader(true);
-  try{await apiWrite(`${TICKETS_NODE}/${id}`,updated);await refresh();showLoader(false);return true}
+  try{await apiWrite(`${TICKETS_NODE}/${id}`,updated);await refresh();showLoader(false);render();return true}
   catch(e){showLoader(false);toast(e.message||"Update failed","err");return false}
 }
 async function setStatus(id,status){
@@ -1153,7 +1177,6 @@ function sigOf(el){
 // elements whose subtree we never tag (data-driven / movable)
 function isSkippable(el){
   return el.classList&&(
-    el.classList.contains("tk")||           // ticket card
     el.classList.contains("store-group")||  // store accordion (varies with stores)
     el.classList.contains("cmt")||          // a comment
     el.classList.contains("tl-item")||      // activity row
@@ -1172,6 +1195,7 @@ function applyTags(){
   const role=SESSION.role, prefix=ROLE_PREFIX[role]||"x";
   if(!tagRegistry[role]){tagRegistry[role]={};tagCounter[role]=0}
   const reg=tagRegistry[role];
+  let firstTicketTagged=false; // only the first ticket card gets numbered, for reference
   const roots=[$("topbar"),$("mainView")];
   const ov=$("modalOverlay"); if(ov&&ov.classList.contains("on"))roots.push(ov);
   roots.forEach(root=>{if(root)walk(root)});
@@ -1184,19 +1208,41 @@ function applyTags(){
     if(cs.display==="none"||cs.visibility==="hidden"||cs.opacity==="0")return false;
     return true;
   }
+  function tagEl(child,sigKey){
+    let num=reg[sigKey];
+    if(num===undefined){num=++tagCounter[role];reg[sigKey]=num}
+    child.setAttribute("data-reftagged","");
+    const tag=document.createElement("span");
+    tag.className="reftag";tag.textContent=prefix+num;
+    child.appendChild(tag);
+  }
   function walk(el){
     [...el.children].forEach(child=>{
-      if(isSkippable(child))return; // skip data-driven subtrees entirely
-      if(visible(child)){
-        const sig=sigOf(child);
-        let num=reg[sig];
-        if(num===undefined){num=++tagCounter[role];reg[sig]=num}
-        child.setAttribute("data-reftagged","");
-        const tag=document.createElement("span");
-        tag.className="reftag";tag.textContent=prefix+num;
-        child.appendChild(tag);
+      const isTicket=child.classList&&child.classList.contains("tk");
+      if(isTicket){
+        // tag only the FIRST ticket card so it can be referenced; skip the rest
+        if(firstTicketTagged)return;
+        firstTicketTagged=true;
+        if(visible(child)){tagEl(child,"tk-first");}
+        // walk its children with ticket-relative stable keys
+        walkTicket(child);
+        return;
       }
+      if(isSkippable(child))return;
+      if(visible(child))tagEl(child,sigOf(child));
       if(child.children&&child.children.length)walk(child);
+    });
+  }
+  // inside the first ticket, key children by class so numbers stay stable
+  function walkTicket(el){
+    [...el.children].forEach(child=>{
+      if(child.classList&&child.classList.contains("reftag"))return;
+      if(child.classList&&(child.classList.contains("tk-photos")))return;
+      if(visible(child)){
+        const cls=(child.className||"").split(" ")[0]||child.tagName.toLowerCase();
+        tagEl(child,"tkpart:"+cls);
+      }
+      if(child.children&&child.children.length)walkTicket(child);
     });
   }
 }
