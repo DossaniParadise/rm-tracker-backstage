@@ -257,7 +257,56 @@ body.simulating .wrap{padding-bottom:40px}
 .poll-dot{position:fixed;left:14px;bottom:14px;z-index:50;font-family:var(--mono);font-size:10px;color:var(--ink-dim);display:flex;align-items:center;gap:6px}
 .poll-dot .d{width:6px;height:6px;border-radius:50%;background:var(--green)}
 .poll-dot.busy .d{background:var(--amber)}
-@media(max-width:560px){.wrap{padding:18px 14px 90px}.page-title{font-size:22px}.hub{grid-template-columns:1fr}.sg-body{grid-template-columns:1fr}.detail-row .v{max-width:55vw}}
+@media(max-width:600px){
+  .wrap{padding:16px 12px 88px}
+  .page-title{font-size:21px}
+  .page-head{gap:10px}
+  .hub{grid-template-columns:1fr}
+  .sg-body{grid-template-columns:1fr;padding:10px 12px 14px}
+  .detail-row{gap:10px}
+  .detail-row .v{max-width:52vw}
+  /* topbar: tighten, hide brand text, keep icons tappable */
+  .topbar{gap:8px;padding:10px 12px}
+  .brand-sub{display:none}
+  .brand-name{font-size:15px}
+  .who-name{max-width:30vw;font-size:12px}
+  .icon-btn{width:40px;height:40px}
+  /* filter bars stack: label on its own line */
+  .filter-bar{flex-direction:column;gap:6px;margin-bottom:14px}
+  .filter-bar-label{text-align:left;width:auto;padding-top:0}
+  .loc-select{max-width:none}
+  .search{width:100%}
+  /* stats scroll horizontally instead of cramming */
+  .statline{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px;scrollbar-width:none}
+  .statline::-webkit-scrollbar{display:none}
+  .stat{min-width:104px;flex:0 0 auto}
+  /* store group header wraps cleanly */
+  .sg-head{flex-wrap:wrap;gap:8px;padding:12px 13px}
+  .sg-name{flex:1 1 100%;order:1}
+  .sg-chev{order:0}
+  .sg-num,.sg-count{order:2}
+  .sg-people{padding:0 13px 11px}
+  /* modal: full-width sheet from the bottom */
+  .sheet{max-width:100%}
+  .sheet-body{padding:16px}
+  .sheet-head{padding:15px 16px}
+  .sheet-foot{padding:12px 16px}
+  .status-grid{grid-template-columns:1fr 1fr}
+  .photo-grid img{width:72px;height:72px}
+  /* comments + activity tighter */
+  .cmt-time{margin-left:0;flex-basis:100%}
+  /* View As rows + sim frame */
+  .va-list{max-height:54vh}
+  /* fab smaller, out of thumb-zone conflict */
+  .fab{right:14px;bottom:16px;padding:13px 16px}
+  .poll-dot{left:10px;bottom:10px}
+  .login-card{max-width:100%}
+}
+@media(max-width:380px){
+  .stat{min-width:92px}
+  .chip{padding:6px 11px;font-size:12px}
+}
+@media(max-width:600px){.input,textarea.input,select.input{font-size:16px}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 </head>
@@ -524,7 +573,7 @@ function openViewAs(){
   modal(`
     <div class="sheet-head"><h2>View as…</h2><button class="x-btn" onclick="closeModal()">✕</button></div>
     <div class="sheet-body">
-      <p style="color:var(--ink-dim);font-size:13px;margin-top:0">See the app exactly as this person sees it. Search by store number, store name, or manager name.</p>
+      <p style="color:var(--ink-dim);font-size:13px;margin-top:0">Search by store #, name, or manager.</p>
       <input class="input" id="vaSearch" placeholder="Search store #, store name, or name…" oninput="filterViewAs(this.value)" style="margin-bottom:12px">
       <div class="va-list" id="vaList">${roster.map(rowHtml).join("")}</div>
     </div>
@@ -639,7 +688,7 @@ function renderManagerHub(){
   const coach=storeCoach(sid), dir=storeDirector(sid), tech=storeTech(sid);
   const cards=open.length
     ? `<div class="sg-body" style="border:none;padding:0;margin-top:4px">${open.map(ticketCard).join("")}</div>`
-    : `<div class="empty" style="padding:40px 20px"><div class="empty-mark">✅</div><h3>No open tickets</h3><p>You're all clear. Use the button above to report a new issue.</p></div>`;
+    : `<div class="empty" style="padding:40px 20px"><div class="empty-mark">✅</div><h3>No open tickets</h3><p>All clear.</p></div>`;
   return `
     <div class="page-head">
       <div>
@@ -654,7 +703,7 @@ function renderManagerHub(){
     </div>
     <button class="hub-btn accent" style="width:100%;margin-bottom:22px" onclick="openCreate('${sid}')">
       <div class="hb-ic">📝</div><div class="hb-t">Report new issue</div>
-      <div class="hb-d">Open a maintenance ticket for your store. Add photos so the tech knows what they're walking into.</div>
+      <div class="hb-d">Open a ticket for your store. Add photos if helpful.</div>
     </button>
     <div class="section-label" style="margin-top:0">Your open tickets · ${open.length}<span class="ln"></span></div>
     ${cards}`;
@@ -678,7 +727,7 @@ function renderBoard(){
   else if(SESSION.role==="manager"){title=storeName(SESSION.storeId);meta=storeNum(SESSION.storeId)}
   else{title=ROLE_LABEL[SESSION.role]+" board";meta=`${storeIds.length} stores in your area`}
 
-  const backBtn=(SESSION.role==="manager")?`<button class="btn btn-ghost btn-sm" onclick="managerScreen='hub';render()">← Back</button>`:"";
+  const backBtn="";
 
   const head=`
     <div class="page-head">
@@ -723,7 +772,7 @@ function renderBoard(){
     </div>`;
 
   if(!storeIds.length){
-    return head+`<div class="empty"><div class="empty-mark">🏪</div><h3>No stores assigned to you</h3><p>Your assignments are managed in the alignment master.</p></div>`;
+    return head+`<div class="empty"><div class="empty-mark">🏪</div><h3>No stores assigned to you</h3><p>Managed in the master.</p></div>`;
   }
 
   // sort stores by name; apply location filter; hide empty groups when status-filtering/searching
@@ -834,7 +883,7 @@ function openCreate(preStore){
         <div class="field" style="flex:1"><label class="label">Priority</label><select class="input" id="cPri">${priOpts}</select></div>
       </div>
       <div class="field" style="margin-top:14px"><label class="label">What's the issue?</label>
-        <textarea class="input" id="cDesc" placeholder="Describe the problem, location in the store, and anything the tech should know."></textarea></div>
+        <textarea class="input" id="cDesc" placeholder="Describe the problem and location."></textarea></div>
       <div class="field" style="margin-top:14px"><label class="label">Photos (optional)</label>
         <div class="upload-zone" onclick="$('cFile').click()"><div class="uz-ic">📷</div><div class="uz-t">Add photos</div><div class="uz-h mono">tap to choose · up to 5</div></div>
         <input type="file" id="cFile" accept="image/*" multiple style="display:none" onchange="addDraftPhotos(this)">
@@ -931,7 +980,7 @@ function openTicket(id){
       <div class="section-label">Comments<span class="ln"></span></div>
       <div class="comments" id="commentList">${renderComments(t)}</div>
       <div class="comment-add">
-        <textarea class="input" id="cmtInput" placeholder="Add a comment for the team…" style="min-height:64px"></textarea>
+        <textarea class="input" id="cmtInput" placeholder="Add a comment…" style="min-height:64px"></textarea>
         <button class="btn btn-primary btn-sm" id="cmtSend" onclick="addComment('${id}')">Post comment</button>
       </div>
       <div class="section-label">Activity<span class="ln"></span></div>
@@ -950,7 +999,7 @@ function actionText(a){
 }
 function renderComments(t){
   const list=Array.isArray(t.comments)?t.comments:[];
-  if(!list.length)return '<div style="color:var(--ink-dim);font-size:13px;padding:2px 0 6px">No comments yet. Start the thread below.</div>';
+  if(!list.length)return '<div style="color:var(--ink-dim);font-size:13px;padding:2px 0 6px">No comments yet.</div>';
   return list.slice().sort((a,b)=>a.ts-b.ts).map(c=>`
     <div class="cmt">
       <div class="cmt-head"><span class="cmt-who">${esc(c.by)}</span>
@@ -990,7 +1039,7 @@ function ticketControls(t){
     return h;
   }
 
-  if(isClosed) return `<div class="section-label">Closed<span class="ln"></span></div><div style="color:var(--ink-dim);font-size:13px">This ticket is closed. Only Overwatch can reopen it.</div>`;
+  if(isClosed) return `<div class="section-label">Closed<span class="ln"></span></div><div style="color:var(--ink-dim);font-size:13px">Closed. Only Overwatch can reopen.</div>`;
 
   // TECH actions
   if(role==="tech"){
@@ -1011,8 +1060,9 @@ function ticketControls(t){
     // waiting allowed for overwatch+tech per spec; managers/coaches/directors skip it
     if(t.status!=="finished")
       h+=`<button class="btn btn-primary btn-block fin" onclick="setStatus('${t._id}','finished')">✓ Mark finished</button>`;
-    h+=`<button class="btn btn-danger btn-block" onclick="setStatus('${t._id}','closed')">✕ Close ticket</button>`;
-    h+=`</div><div style="font-size:11px;color:var(--ink-dim);margin-top:8px">Closing removes the ticket from all views except Overwatch (kept for reporting).</div>`;
+    if(role!=="manager")
+      h+=`<button class="btn btn-danger btn-block" onclick="setStatus('${t._id}','closed')">✕ Close ticket</button>`;
+    h+=`</div>${role!=="manager"?`<div style="font-size:11px;color:var(--ink-dim);margin-top:8px">Closing removes the ticket from all views except Overwatch.</div>`:""}`;
     return h;
   }
   return h;
@@ -1033,7 +1083,7 @@ function assignControls(t){
       <optgroup label="Third-party vendors → Assigned">${venOpts||'<option disabled>No vendors added</option>'}</optgroup>
     </select>
     <button class="btn btn-primary" onclick="doAssign('${t._id}')">Set</button></div>
-    <div style="font-size:11px;color:var(--ink-dim);margin-top:7px">In-house tech → status becomes <b>Dispatched</b>. Third-party vendor → status becomes <b>Assigned</b>.</div>`;
+    <div style="font-size:11px;color:var(--ink-dim);margin-top:7px">Tech → Dispatched · Vendor → Assigned</div>`;
 }
 
 /* ============================================================ MUTATIONS */
@@ -1120,7 +1170,7 @@ function openVendors(){
       <button class="btn btn-danger btn-sm" onclick="removeVendor('${id}')">Remove</button></div>`).join("");
   modal(`<div class="sheet-head"><h2>Approved vendors</h2><button class="x-btn" onclick="closeModal()">✕</button></div>
     <div class="sheet-body">
-      <p style="color:var(--ink-dim);font-size:13px;margin-top:0">Third-party vendors available for ticket assignment.</p>
+      <p style="color:var(--ink-dim);font-size:13px;margin-top:0">Third-party vendors for assignment.</p>
       <div id="vendorRows">${rows||'<div class="empty" style="padding:34px"><div class="empty-mark">🏢</div><h3>No vendors yet</h3><p>Add your first approved vendor below.</p></div>'}</div>
       <button class="btn btn-ghost btn-block" style="margin-top:14px" onclick="editVendor(null)">＋ Add vendor</button>
     </div>
