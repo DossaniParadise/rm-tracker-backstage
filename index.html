@@ -75,7 +75,7 @@ body.no-reftags .reftag{display:none}
 .input{background:var(--panel-2);border:1px solid var(--line);border-radius:9px;padding:13px 14px;color:var(--ink);font-size:15px;width:100%;transition:.15s}
 .input:focus{outline:none;border-color:var(--amber);box-shadow:0 0 0 3px rgba(255,176,0,.12)}
 .input::placeholder{color:var(--ink-dim)}
-.btn{border:1px solid transparent;border-radius:9px;padding:13px 18px;font-weight:600;font-size:15px;display:inline-flex;align-items:center;justify-content:center;gap:8px;transition:.15s;white-space:nowrap}
+.btn{border:1px solid transparent;border-radius:9px;padding:13px 18px;font-weight:600;font-size:15px;display:inline-flex;align-items:center;justify-content:center;gap:8px;transition:.15s;white-space:nowrap;text-decoration:none}
 .btn-primary{background:var(--amber);color:#1a1305;border-color:var(--amber-deep);font-weight:700}
 .btn-primary:hover{background:#ffbe2e}
 .btn-primary:disabled{opacity:.55;cursor:not-allowed}
@@ -328,6 +328,19 @@ body.simulating .wrap{padding-bottom:40px}
   .fab{right:14px;bottom:16px;padding:13px 16px}
   .poll-dot{left:10px;bottom:10px}
   .login-card{max-width:100%}
+  /* --- Overwatch management on mobile --- */
+  .board-controls{flex-direction:column;align-items:stretch;gap:8px}
+  .board-controls>*{width:100%}
+  .row-assign{flex-direction:column;align-items:stretch;width:100%;gap:7px}
+  .row-sel{width:100%;min-width:0}
+  .row-bar{flex-direction:column;align-items:stretch;gap:9px}
+  .row-bar .rb-btns{flex-wrap:wrap}
+  .row-bar .rb-btns .btn,.row-bar .rb-btns a.btn{flex:1 1 calc(50% - 4px);justify-content:center;min-height:40px}
+  .bulk-bar{position:sticky;top:60px;z-index:20}
+  .bulk-bar .btn{flex:1 1 auto;min-height:40px}
+  .bulk-count{margin-right:0;flex-basis:100%}
+  .row-chk input{width:22px;height:22px}
+  .rs-label,.rs-who,.rs-meta{text-align:left}
 }
 @media(max-width:380px){
   .tiles-mid>.tile{flex:1 1 45%}
@@ -473,6 +486,15 @@ async function uploadPhoto(file){
 
 /* ============================================================ HELPERS */
 const $=id=>document.getElementById(id);
+// true on phones/tablets where tel:/sms: open native apps
+const IS_MOBILE = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) || (navigator.maxTouchPoints>1 && /Mac/.test(navigator.platform));
+function telLink(num){return "tel:"+String(num).replace(/[^0-9+]/g,"");}
+function smsLink(num,body){return "sms:"+String(num).replace(/[^0-9+]/g,"")+(body?("?&body="+encodeURIComponent(body)):"");}
+function mailtoLink(to,subject,body,replyTo){
+  // mailto can't set true Reply-To, so we surface it in the body for now
+  const params=[]; if(subject)params.push("subject="+encodeURIComponent(subject)); if(body)params.push("body="+encodeURIComponent(body));
+  return "mailto:"+to+(params.length?("?"+params.join("&")):"");
+}
 function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
 function escA(s){return String(s??"").replace(/"/g,"&quot;")}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
@@ -918,10 +940,11 @@ function ticketRow(t){
   let right;
   if(isAdmin && t.status==="unassigned"){
     right=`<div class="row-assign" onclick="event.stopPropagation()">
-      <select class="input row-sel" id="rsel_${t._id}">
+      <select class="input row-sel" id="rsel_${t._id}" onchange="if(this.value==='__add__'){this.value='';openVendors();}">
         <option value="">Assign to…</option>
         <optgroup label="In-house techs">${Object.entries(MASTER.repairTechnicians||{}).map(([id,v])=>`<option value="tech:${id}">${esc(v.name)}</option>`).join("")}</optgroup>
-        <optgroup label="Third-party techs">${Object.entries(VENDORS).map(([id,v])=>`<option value="vendor:${id}">${esc(v.name)}</option>`).join("")||'<option disabled>None</option>'}</optgroup>
+        <optgroup label="Third-party techs">${Object.entries(VENDORS).map(([id,v])=>`<option value="vendor:${id}">${esc(v.name)}</option>`).join("")||'<option disabled>None added</option>'}</optgroup>
+        <option value="__add__">＋ Add new tech…</option>
       </select>
       <button class="btn btn-primary btn-sm" onclick="rowAssign('${t._id}')">Assign</button>
     </div>`;
@@ -942,20 +965,18 @@ function ticketRow(t){
   if(isAdmin){
     if(t.status==="assigned" && who){
       below=`<div class="row-bar" onclick="event.stopPropagation()">
-        <span>Contacted <b>${esc(who.name)}</b> already?</span>
-        <div class="rb-btns">
-          <button class="btn btn-primary btn-sm" onclick="confirmContact('${t._id}')">Yes</button>
-          <button class="btn btn-ghost btn-sm" onclick="openContact('${t._id}')">No</button>
-          <button class="btn btn-ghost btn-sm" onclick="rowUnassign('${t._id}')">Unassign</button>
+        <span>Would you like to contact <b>${esc(who.name)}</b>?</span>
+        <div class="rb-btns">${contactBtns(t,who)}
+          <button class="btn btn-primary btn-sm" onclick="confirmContact('${t._id}')">Already done</button>
         </div></div>`;
     }else if(t.status==="waiting" && who){
       below=`<div class="row-bar" onclick="event.stopPropagation()">
         <span><b>Waiting:</b> ${esc(t.waitingReason||"reason not set")}</span>
-        <div class="rb-btns">${contactBtns(t,who,"Tell "+who.name.split(" ")[0]+" wait is over")}</div></div>`;
+        <div class="rb-btns">${contactBtns(t,who)}</div></div>`;
     }else if(t.status==="in_progress" && who){
       below=`<div class="row-bar" onclick="event.stopPropagation()">
         <span><b>In progress</b> · ${elapsedHM(t.clockInAt)}</span>
-        <div class="rb-btns">${contactBtns(t,who,"Contact "+who.name.split(" ")[0])}</div></div>`;
+        <div class="rb-btns">${contactBtns(t,who)}</div></div>`;
     }else if(t.status==="finished"){
       below=`<div class="row-bar" onclick="event.stopPropagation()">
         <span><b>Finished</b> — ready to close out?</span>
@@ -995,13 +1016,32 @@ function ticketRow(t){
       <div class="row-right">${right}</div>
     </div>${below}</div>`;
 }
-// build whatever contact channels the person actually has info for
-function contactBtns(t,who,emailLabel){
+// On a phone: Text / Call / Email open native apps directly (no API).
+// On desktop: no buttons — just a hint to use a phone.
+function contactBtns(t,who){
+  if(!IS_MOBILE){
+    return `<span class="rb-none">Open on your phone for contact options</span>`;
+  }
+  const msg=draftBody(t,who);
+  const subj=`Ticket ${t.shortId} · ${storeName(t.storeId)}`;
   let b="";
-  if(who.phone) b+=`<button class="btn btn-ghost btn-sm" onclick="draftContact('${t._id}','sms')">✉ Text</button>`;
-  if(who.email) b+=`<button class="btn btn-ghost btn-sm" onclick="draftContact('${t._id}','email')">@ Email</button>`;
+  if(who.phone){
+    b+=`<a class="btn btn-ghost btn-sm" href="${escA(smsLink(who.phone,msg))}">✉ Text</a>`;
+    b+=`<a class="btn btn-ghost btn-sm" href="${escA(telLink(who.phone))}">📞 Call</a>`;
+  }
+  if(who.email){
+    const replyTo=SESSION.email;
+    b+=`<a class="btn btn-ghost btn-sm" href="${escA(mailtoLink(who.email,subj,msg+"\n\nReply to: "+replyTo,replyTo))}">@ Email</a>`;
+  }
   if(!b) b=`<span class="rb-none">No contact info on file</span>`;
   return b;
+}
+// shared message body (ticket + store + address + photo links + reply-to)
+function draftBody(t,who){
+  const addr=store(t.storeId).address||"";
+  const photos=(t.photos||[]);
+  const photoBlock=photos.length?("\n\nPhotos:\n"+photos.join("\n")):"";
+  return `Hi ${who.name}, regarding ticket ${t.shortId} at ${storeName(t.storeId)}${addr?(" — "+addr):""}: ${t.description||""}${photoBlock}`;
 }
 function fmtDateShort(ts){if(!ts)return"";const d=new Date(ts);return d.toLocaleDateString("en-US",{month:"numeric",day:"numeric"})}
 // inline assign from a row (admin)
@@ -1021,49 +1061,6 @@ async function confirmContact(id){
 async function rowUnassign(id){
   if(await patchTicket(id,{status:"unassigned",assignedTechId:null,assignedVendorId:null},{action:"assign",note:"unassigned (pool)",toStatus:"unassigned"}))
     toast("Back to unassigned");
-}
-// No → choose how to reach out (drafts only; Twilio/SendGrid later)
-function openContact(id){draftContact(id,null)}
-function draftContact(id,channel){
-  const t=TICKETS[id], who=ticketAssignee(t);
-  if(!who){toast("No assignee","err");return}
-  const hasSms=!!who.phone, hasEmail=!!who.email;
-  // if a channel was requested directly, show that draft; else show a chooser
-  const chooser = !channel ? `
-    <div class="contact-choose">
-      ${hasSms?`<button class="btn btn-ghost btn-block" onclick="draftContact('${id}','sms')">✉ Text ${esc(who.phone)}</button>`:""}
-      ${hasEmail?`<button class="btn btn-ghost btn-block" onclick="draftContact('${id}','email')">@ Email ${esc(who.email)}</button>`:""}
-      ${(!hasSms&&!hasEmail)?`<div class="empty" style="padding:24px"><p>No phone or email on file for ${esc(who.name)}. Add it in their tech record.</p></div>`:""}
-    </div>` : "";
-  const addr=store(t.storeId).address||"";
-  const photos=(t.photos||[]);
-  const photoBlock=photos.length?("\n\nPhotos:\n"+photos.join("\n")):"";
-  const replyEmail=SESSION.email; // the dispatching Overwatch
-  const replyPhone=REPLY_NUMBERS[(SESSION.email||"").toLowerCase()]||"";
-  const draftMsg = `Hi ${who.name}, regarding ticket ${t.shortId} at ${storeName(t.storeId)}${addr?(" — "+addr):""}: ${t.description||""}${photoBlock}`;
-  const replyLine = channel==="email"
-    ? `Reply to: ${replyEmail}`
-    : (replyPhone?`Reply to: ${replyPhone}`:`Reply number not set — add it in ⚙ Settings`);
-  const draft = channel ? `
-    <div class="field"><label class="label">To</label>
-      <input class="input" value="${escA(channel==="sms"?who.phone:who.email)}" readonly></div>
-    <div class="field" style="margin-top:12px"><label class="label">${channel==="sms"?"Text message":"Email body"}</label>
-      <textarea class="input" id="draftBody" style="min-height:140px">${esc(draftMsg)}</textarea></div>
-    <div class="field" style="margin-top:12px"><label class="label">Replies go to</label>
-      <input class="input" value="${escA(channel==="email"?replyEmail:(replyPhone||"(not set)"))}" readonly></div>
-    <div class="contact-note">${esc(replyLine)} · Draft only — sending via ${channel==="sms"?"SMS (Twilio)":"email (SendGrid)"} will be wired up later.</div>` : "";
-  modal(`
-    <div class="sheet-head"><h2>Contact ${esc(who.name)}</h2><button class="x-btn" onclick="closeModal()">✕</button></div>
-    <div class="sheet-body">${chooser}${draft}</div>
-    <div class="sheet-foot">
-      ${channel?`<button class="btn btn-ghost" style="flex:1" onclick="draftContact('${id}',null)">← Back</button>
-        <button class="btn btn-primary" style="flex:1" onclick="markContacted('${id}')">Mark as contacted</button>`
-        :`<button class="btn btn-ghost btn-block" onclick="closeModal()">Cancel</button>`}
-    </div>`);
-}
-async function markContacted(id){
-  closeModal();
-  await confirmContact(id); // logging contact → dispatched, same as "Yes"
 }
 
 /* ============================================================ MODAL */
