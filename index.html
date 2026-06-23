@@ -163,6 +163,7 @@ body.no-reftags .reftag{display:none}
   margin-top:-1px;padding:9px 15px;font-size:13px;color:var(--ink-mid)}
 .row-bar b{color:var(--ink)}
 .rb-btns{display:flex;gap:7px;flex-wrap:wrap}
+.rb-btns .btn.tk-cur{opacity:1;border-color:var(--amber);background:rgba(245,158,11,.12);color:var(--amber-deep);font-weight:700;cursor:default}
 .rb-none{font-size:12px;color:var(--ink-dim);font-style:italic}
 .row-wrap .row{position:relative;z-index:1}
 .row-wrap:has(.row-bar) .row{border-radius:10px 10px 0 0}
@@ -235,6 +236,7 @@ body.no-reftags .reftag{display:none}
 .preview-strip .pv{position:relative}
 .preview-strip img{width:52px;height:52px;border-radius:8px;object-fit:cover;border:1px solid var(--line)}
 .preview-strip .pv-x{position:absolute;top:-5px;right:-5px;background:var(--red);color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:10px;line-height:1;display:grid;place-items:center}
+.preview-strip .pv-spin{position:absolute;inset:0;display:grid;place-items:center;background:rgba(255,255,255,.6);border-radius:8px}
 textarea.input{resize:vertical;min-height:90px;line-height:1.5}
 select.input{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%236b7686' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center;padding-right:36px}
 .vrow{display:flex;align-items:center;gap:12px;padding:13px 0;border-bottom:1px solid var(--line-soft)}
@@ -670,10 +672,15 @@ function myStoreIds(){
   return Object.keys(RESTAURANTS).filter(r=>RESTAURANTS[r][SESSION.refField]===SESSION.refId);
 }
 // Closed tickets vanish from every view EXCEPT overwatch (kept for stats/reports).
+// Statuses a tech is ever allowed to see. To keep their world simple, a tech
+// only sees work that's been dispatched to them (dispatched/waiting/in_progress)
+// plus what they've finished. No unassigned/assigned/closed.
+const TECH_VISIBLE_STATUSES=["dispatched","waiting","in_progress","finished"];
 function ticketsForStore(sid){
   return Object.keys(TICKETS).map(k=>({_id:k,...TICKETS[k]}))
     .filter(t=>t.storeId===sid)
-    .filter(t=>SESSION.role==="admin" || t.status!=="closed");
+    .filter(t=>SESSION.role==="admin" || t.status!=="closed")
+    .filter(t=>SESSION.role!=="tech" || TECH_VISIBLE_STATUSES.includes(t.status));
 }
 
 /* ============================================================ PERMISSIONS */
@@ -698,6 +705,7 @@ function enterAppChrome(){
 }
 function enterApp(){
   enterAppChrome();
+  if(SESSION.role==="tech" && (curFilter==="active"||curFilter==="all")) curFilter="dispatched";
   managerScreen="hub";
   myStoreIds().forEach(id=>openGroups[id]=true);
   render();
@@ -779,6 +787,40 @@ function renderBoard(){
   else if(SESSION.role==="admin"){title="All stores";meta=`${storeIds.length} locations · overwatch`}
   else if(SESSION.role==="manager"){title=storeName(SESSION.storeId);meta="Your store"}
   else{title=ROLE_LABEL[SESSION.role]+" board";meta=`${storeIds.length} stores in your area`}
+
+  // TECH view: only two buckets. "Dispatched" folds in dispatched + waiting +
+  // in_progress (everything actively on their plate); "Finished" is its own tab.
+  if(SESSION.role==="tech"){
+    const dispN=cnt("dispatched")+cnt("waiting")+cnt("in_progress");
+    const finN=cnt("finished");
+    const techTiles=`
+      <div class="tiles-wrap" id="tilesWrap">
+        ${tile("dispatched",dispN,"DISPATCHED","On your plate","var(--blue)")}
+        ${tile("finished",finN,"FINISHED","Work done","var(--s-finished)")}
+      </div>`;
+    const techHead=`
+      <div class="page-head">
+        <div><div class="page-title">${esc(title)}</div><div class="page-meta">${esc(meta)}</div></div>
+      </div>
+      ${techTiles}
+      <div class="board-controls">
+        ${storeIds.length>1?`<select class="input loc-select" onchange="curStore=this.value;render()">
+          <option value="all"${curStore==="all"?" selected":""}>All stores (${storeIds.length})</option>
+          ${storeIds.slice().sort((a,b)=>storeName(a).localeCompare(storeName(b))).map(id=>`<option value="${id}"${curStore===id?" selected":""}>${esc(storeName(id))}</option>`).join("")}
+        </select>`:""}
+        <input class="input search" placeholder="Search store, issue, ticket #…" value="${escA(curSearch)}" oninput="curSearch=this.value;render()">
+      </div>`;
+    if(!storeIds.length) return techHead+`<div class="empty"><div class="empty-mark">🏪</div><h3>No stores dispatched to you</h3><p>Managed in the master.</p></div>`;
+    let trows=allTickets.slice();
+    if(curStore!=="all") trows=trows.filter(t=>t.storeId===curStore);
+    trows=applyFilterSearch(trows);
+    const tlabel = curFilter==="finished" ? "Finished" : "Dispatched";
+    const tlistHead=`<div class="list-head">${tlabel} tickets <span class="lh-n">(${trows.length})</span></div>`;
+    const tbody = trows.length
+      ? `<div class="rows">${trows.map(ticketRow).join("")}</div>`
+      : `<div class="empty"><div class="empty-mark">🗂️</div><h3>Nothing here</h3><p>${curSearch?"No tickets match your search.":"No tickets in this view."}</p></div>`;
+    return techHead+tlistHead+tbody;
+  }
 
   // Open (yellow) = all not-closed; Closed (grey) always visible.
   // The 6 lifecycle tiles in between expand on hover (desktop) / tap (touch).
@@ -890,7 +932,10 @@ function toggleTiles(){
 
 function applyFilterSearch(list){
   let out=list.slice();
-  if(curFilter==="active")out=out.filter(t=>ACTIVE_STATUSES.includes(t.status));
+  // Tech "Dispatched" tab is a bucket: dispatched + waiting + in_progress.
+  if(SESSION.role==="tech" && curFilter==="dispatched")
+    out=out.filter(t=>["dispatched","waiting","in_progress"].includes(t.status));
+  else if(curFilter==="active")out=out.filter(t=>ACTIVE_STATUSES.includes(t.status));
   else if(curFilter==="all")out=out.filter(t=>SESSION.role==="admin"?true:t.status!=="closed");
   else out=out.filter(t=>t.status===curFilter);
   if((curFilter==="dispatched"||curFilter==="assigned")&&curAssignee!=="all"){
@@ -989,6 +1034,24 @@ function ticketRow(t){
           <button class="btn btn-ghost btn-sm" onclick="setStatus('${t._id}','unassigned')">→ Unassigned</button>
         </div></div>`;
     }
+  }
+  // ----- tech per-ticket status bar (Dispatched tab only) -----
+  // One tap moves the ticket on our end. Tech only ever toggles between
+  // waiting / in progress / finished — current status is shown as active.
+  if(SESSION.role==="tech" && curFilter==="dispatched"){
+    const b=(target,emoji,labelTxt)=>{
+      const isCur=t.status===target;
+      const cls=target==="finished"?"btn-primary":"btn-ghost";
+      const act=target==="finished"?`openFinish('${t._id}')`:`setStatus('${t._id}','${target}')`;
+      return `<button class="btn ${cls} btn-sm${isCur?" tk-cur":""}" ${isCur?"disabled":""} onclick="event.stopPropagation();${act}">${emoji} ${labelTxt}${isCur?" ·":""}</button>`;
+    };
+    below=`<div class="row-bar" onclick="event.stopPropagation()">
+      <span><b>Move this job to:</b></span>
+      <div class="rb-btns">
+        ${b("waiting","⏸","Waiting")}
+        ${b("in_progress","▶","In Progress")}
+        ${b("finished","✓","Finished")}
+      </div></div>`;
   }
   // selection checkbox (select mode, finished/closed pages)
   const showChk = selectMode && (curFilter==="finished"||curFilter==="closed");
@@ -1256,7 +1319,7 @@ function ticketControls(t){
     if(!t.clockInAt) h+=`<button class="btn btn-primary btn-block" onclick="techClockIn('${t._id}')">⏱ Clock in &amp; start</button>`;
     else h+=`<div class="detail-row" style="border:none;padding-top:0"><span class="k">Clocked in</span><span class="v">${fmtDate(t.clockInAt)}</span></div>`;
     if(t.status!=="waiting") h+=`<button class="btn btn-ghost btn-block" onclick="openWaiting('${t._id}')">⏸ Set to waiting…</button>`;
-    if(t.status!=="finished") h+=`<button class="btn btn-primary btn-block fin" onclick="techFinish('${t._id}')">✓ Clock out &amp; mark finished</button>`;
+    if(t.status!=="finished") h+=`<button class="btn btn-primary btn-block fin" onclick="openFinish('${t._id}')">✓ Clock out &amp; mark finished</button>`;
     h+=`</div>`;
     return h;
   }
@@ -1408,6 +1471,65 @@ async function techClockIn(id){
 }
 async function techFinish(id){
   if(await patchTicket(id,{status:"finished",finishedAt:now(),clockOutAt:now()},{action:"clockout",toStatus:"finished"})){toast("Clocked out · finished");openTicket(id)}
+}
+
+/* ---- finish with a required photo (mobile-first) ----
+   Tapping "Finished" anywhere a tech can opens this sheet. One big tap target
+   opens the camera straight away on a phone (capture=environment). At least one
+   photo is required; on confirm we upload, append to the ticket's photos, and
+   mark it finished (preserving the clock-out timestamps). */
+let finishPhotos=[];
+function openFinish(id){
+  finishPhotos=[];
+  const camAttr = IS_MOBILE ? ' capture="environment"' : '';
+  modal(`<div class="sheet-head"><h2>Finish job</h2><button class="x-btn" onclick="openTicket('${id}')">✕</button></div>
+    <div class="sheet-body">
+      <p style="margin:0 0 14px;color:var(--ink-mid);font-size:14px">Add a quick photo of the completed work before you close this out.</p>
+      <div class="upload-zone" id="finUz" onclick="$('finFile').click()">
+        <div class="uz-ic">📸</div><div class="uz-t">Take a photo</div>
+        <div class="uz-h mono">${IS_MOBILE?"opens your camera":"tap to choose a photo"}</div>
+      </div>
+      <input type="file" id="finFile" accept="image/*"${camAttr} multiple style="display:none" onchange="addFinishPhotos('${id}',this)">
+      <div class="preview-strip" id="finPreview"></div>
+    </div>
+    <div class="sheet-foot">
+      <button class="btn btn-ghost" style="flex:1" onclick="openTicket('${id}')">Cancel</button>
+      <button class="btn btn-primary fin" style="flex:1" id="finConfirm" disabled onclick="confirmFinish('${id}')">✓ Mark finished</button>
+    </div>`);
+}
+async function addFinishPhotos(id,input){
+  const files=[...input.files].slice(0,5-finishPhotos.length);input.value="";
+  const uz=$("finUz");
+  for(const f of files){
+    if(f.size>10*1024*1024){toast("Photo over 10MB skipped","err");continue}
+    const localUrl=URL.createObjectURL(f);
+    const ph={localUrl,url:null,uploading:true};finishPhotos.push(ph);renderFinishPreview();
+    try{ph.url=await uploadPhoto(f);ph.uploading=false}
+    catch(e){finishPhotos=finishPhotos.filter(p=>p!==ph);toast("A photo failed to upload","err")}
+    renderFinishPreview();
+  }
+}
+function renderFinishPreview(){
+  const el=$("finPreview");if(!el)return;
+  el.innerHTML=finishPhotos.map((p,i)=>`<div class="pv">
+      <img src="${p.localUrl}" alt="">
+      ${p.uploading?`<span class="pv-spin"><span class="inline-spin"></span></span>`:""}
+      <button class="pv-x" onclick="finishPhotos.splice(${i},1);renderFinishPreview()">✕</button>
+    </div>`).join("");
+  const ready=finishPhotos.length>0 && finishPhotos.every(p=>!p.uploading);
+  const btn=$("finConfirm");if(btn)btn.disabled=!ready;
+  applyTags();
+}
+async function confirmFinish(id){
+  const urls=finishPhotos.filter(p=>p.url).map(p=>p.url);
+  if(!urls.length){toast("Add a photo first","err");return}
+  const btn=$("finConfirm");if(btn){btn.disabled=true;btn.innerHTML='<span class="inline-spin"></span> Finishing…'}
+  const t=TICKETS[id];const photos=(t&&Array.isArray(t.photos)?t.photos.slice():[]).concat(urls);
+  const patch={status:"finished",finishedAt:now(),photos};
+  if(t&&t.clockInAt&&!t.clockOutAt)patch.clockOutAt=now();
+  if(await patchTicket(id,patch,{action:"clockout",toStatus:"finished",note:`Finished with ${urls.length} photo${urls.length>1?"s":""}`})){
+    toast("Finished · photo added");finishPhotos=[];openTicket(id);
+  }else if(btn){btn.disabled=false;btn.innerHTML="✓ Mark finished"}
 }
 function openWaiting(id){
   const opts=WAITING_REASONS.map(r=>`<option value="${escA(r)}">${esc(r)}</option>`).join("");
