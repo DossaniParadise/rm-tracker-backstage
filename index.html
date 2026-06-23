@@ -143,6 +143,21 @@ body.no-reftags .reftag{display:none}
 .row-status{text-align:right;min-width:90px}
 .rs-label{font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--tc)}
 .rs-who{font-size:12px;color:var(--ink);font-weight:600;margin-top:2px}
+.rs-meta{font-size:11px;margin-top:3px;color:var(--ink-dim)}
+.rs-meta.wait{color:var(--s-waiting);font-weight:600}
+.rs-meta.prog{color:var(--s-progress);font-weight:700;font-family:var(--mono)}
+/* below-row action bars (assigned/waiting/in-progress) */
+.row-wrap{display:flex;flex-direction:column}
+.row-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
+  background:#eef4ff;border:1px solid #d6e4ff;border-top:none;border-radius:0 0 10px 10px;
+  margin-top:-1px;padding:9px 15px;font-size:13px;color:var(--ink-mid)}
+.row-bar b{color:var(--ink)}
+.rb-btns{display:flex;gap:7px;flex-wrap:wrap}
+.rb-none{font-size:12px;color:var(--ink-dim);font-style:italic}
+.row-wrap .row{position:relative;z-index:1}
+.row-wrap:has(.row-bar) .row{border-radius:10px 10px 0 0}
+.contact-choose{display:flex;flex-direction:column;gap:10px}
+.contact-note{font-size:12px;color:var(--ink-dim);background:var(--panel-2);border:1px solid var(--line-soft);border-radius:8px;padding:10px 12px;margin-top:14px}
 .sbadge{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:4px 9px;border-radius:6px;display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
 .sbadge .dot{width:6px;height:6px;border-radius:50%;background:currentColor}
 
@@ -355,7 +370,7 @@ body.simulating .wrap{padding-bottom:40px}
     </div>
     <button class="icon-btn" id="refreshBtn" title="Refresh now" onclick="manualRefresh()">⟳</button>
     <button class="icon-btn hidden" id="viewAsBtn" title="View as another person" onclick="openViewAs()">👁</button>
-    <button class="icon-btn hidden" id="vendorTopBtn" title="Approved vendors" onclick="openVendors()">🏢</button>
+    <button class="icon-btn hidden" id="vendorTopBtn" title="Third-party techs" onclick="openVendors()">🏢</button>
     <button class="icon-btn" id="tagToggle" title="Toggle reference tags" onclick="toggleTags()">#</button>
     <button class="icon-btn" title="Sign out" onclick="logout()">⏻</button>
   </div>
@@ -387,7 +402,7 @@ const VENDORS_NODE = "maintenanceVendors";
 
 const STATUSES = {
   unassigned:{label:"Unassigned",color:"var(--s-open)"},
-  assigned:{label:"Assigned (Vendor)",color:"var(--s-assigned)"},
+  assigned:{label:"Assigned",color:"var(--s-assigned)"},
   dispatched:{label:"Dispatched",color:"var(--blue)"},
   waiting:{label:"Waiting",color:"var(--s-waiting)"},
   in_progress:{label:"In Progress",color:"var(--s-progress)"},
@@ -400,14 +415,14 @@ const ACTIVE_STATUSES = ["unassigned","assigned","dispatched","waiting","in_prog
 const CATEGORIES = {plumbing:"Plumbing",equipment:"Equipment",hvac:"HVAC",electrical:"Electrical",it:"IT / POS",structural:"Structural",safety:"Safety",other:"Other"};
 const CAT_PREFIX = {plumbing:"PLM",equipment:"EQP",hvac:"HVC",electrical:"ELE",it:"IT",structural:"STR",safety:"SAF",other:"GEN"};
 const PRIORITIES = {low:"Low",normal:"Normal",high:"High",urgent:"Urgent"};
-const WAITING_REASONS = ["Awaiting parts","Awaiting vendor","Awaiting approval","Awaiting access","Scheduled — future date","Other"];
+const WAITING_REASONS = ["Awaiting parts","Awaiting third-party tech","Awaiting approval","Awaiting access","Scheduled — future date","Other"];
 const ROLE_LABEL = {admin:"Overwatch",director:"Director",coach:"Area Coach",manager:"Store Manager",tech:"Repair Tech"};
 const ROLE_PREFIX = {admin:"o",director:"d",coach:"a",tech:"r",manager:"m"};
 
 /* ============================================================ STATE */
 let MASTER=null, SESSION=null;
 let TICKETS={}, VENDORS={}, RESTAURANTS={};
-let curFilter="active", curSearch="", curStore="all", tilesExpanded=false;
+let curFilter="active", curSearch="", curStore="all", tilesExpanded=false, curAssignee="all";
 let openGroups={};          // storeId -> bool (expanded)
 let managerScreen="hub";
 let pollTimer=null;
@@ -729,7 +744,7 @@ function renderBoard(){
   // The 6 lifecycle tiles in between expand on hover (desktop) / tap (touch).
   const midTiles=[
     tile("unassigned",cnt("unassigned"),"UNASSIGNED","Needs an owner","var(--s-open)"),
-    tile("assigned",cnt("assigned"),"ASSIGNED","Vendor chosen","var(--s-assigned)"),
+    tile("assigned",cnt("assigned"),"ASSIGNED","Tech chosen","var(--s-assigned)"),
     tile("dispatched",cnt("dispatched"),"DISPATCHED","Sent to tech","var(--blue)"),
     tile("waiting",cnt("waiting"),"WAITING","On hold","var(--s-waiting)"),
     tile("in_progress",cnt("in_progress"),"IN PROGRESS","Being worked","var(--s-progress)"),
@@ -757,6 +772,7 @@ function renderBoard(){
         <option value="all"${curStore==="all"?" selected":""}>All stores (${storeIds.length})</option>
         ${storeIds.slice().sort((a,b)=>storeName(a).localeCompare(storeName(b))).map(id=>`<option value="${id}"${curStore===id?" selected":""}>${esc(storeName(id))} — ${esc(storeNum(id))}</option>`).join("")}
       </select>`:""}
+      ${(curFilter==="dispatched"||curFilter==="assigned")?assigneeFilterSelect(allTickets):""}
       <input class="input search" placeholder="Search store, issue, ticket #…" value="${escA(curSearch)}" oninput="curSearch=this.value;render()">
     </div>`;
 
@@ -776,7 +792,7 @@ function renderBoard(){
 
   function tile(key,n,label,sub,c){
     const on=curFilter===key;
-    return `<button class="tile ${on?"on":""}" style="--tc:${c}" onclick="curFilter='${key}';render()">
+    return `<button class="tile ${on?"on":""}" style="--tc:${c}" onclick="curFilter='${key}';curAssignee='all';render()">
       <div class="tile-l">${label}</div><div class="tile-n">${n}</div><div class="tile-s">${sub}</div></button>`;
   }
 }
@@ -799,39 +815,95 @@ function applyFilterSearch(list){
   if(curFilter==="active")out=out.filter(t=>ACTIVE_STATUSES.includes(t.status));
   else if(curFilter==="all")out=out.filter(t=>SESSION.role==="admin"?true:t.status!=="closed");
   else out=out.filter(t=>t.status===curFilter);
+  if((curFilter==="dispatched"||curFilter==="assigned")&&curAssignee!=="all"){
+    out=out.filter(t=>{const w=ticketAssignee(t);return w&&(w.kind+":"+w.id)===curAssignee});
+  }
   if(curSearch){const q=curSearch.toLowerCase();
     out=out.filter(t=>(t.description||"").toLowerCase().includes(q)||(CATEGORIES[t.category]||"").toLowerCase().includes(q)||(t.shortId||"").toLowerCase().includes(q)||storeName(t.storeId).toLowerCase().includes(q)||storeNum(t.storeId).toLowerCase().includes(q))}
   out.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
   return out;
 }
+// dropdown of the distinct assignees present in the current status, to filter by
+function assigneeFilterSelect(allTickets){
+  const inStatus=allTickets.filter(t=>t.status===curFilter);
+  const seen={};
+  inStatus.forEach(t=>{const w=ticketAssignee(t);if(w)seen[w.kind+":"+w.id]=w.name});
+  const opts=Object.entries(seen).sort((a,b)=>a[1].localeCompare(b[1]))
+    .map(([k,name])=>`<option value="${k}"${curAssignee===k?" selected":""}>${esc(name)}</option>`).join("");
+  const lbl=curFilter==="dispatched"?"dispatched to":"assigned to";
+  return `<select class="input loc-select" onchange="curAssignee=this.value;render()">
+    <option value="all"${curAssignee==="all"?" selected":""}>All (${lbl})</option>${opts}</select>`;
+}
 
 // compact horizontal ticket row
+// resolve who a ticket is on, with kind + contact info (for the contact drafts)
+function ticketAssignee(t){
+  if(t.assignedTechId){const x=(MASTER.repairTechnicians||{})[t.assignedTechId];return x?{kind:"tech",id:t.assignedTechId,name:x.name,email:x.email||"",phone:x.phone||""}:null}
+  if(t.assignedVendorId){const x=VENDORS[t.assignedVendorId];return x?{kind:"vendor",id:t.assignedVendorId,name:x.name,email:x.email||"",phone:x.phone||""}:null}
+  return null;
+}
+// elapsed since a timestamp as "Xh Ym" (no seconds)
+function elapsedHM(ts){
+  if(!ts)return"—";
+  let mins=Math.floor((now()-ts)/60000);
+  if(mins<1)return"just now";
+  const h=Math.floor(mins/60), mm=mins%60;
+  return (h?h+"h ":"")+mm+"m";
+}
 function ticketRow(t){
   const st=STATUSES[t.status]||STATUSES.unassigned;
   const cat=CATEGORIES[t.category]||"Other";
   const pri=t.priority||"normal";
   const priClass={urgent:"u",high:"h",normal:"n",low:"l"}[pri]||"n";
   const photoN=(t.photos||[]).length;
-  // right side: inline assign for admin on unassigned, else assignee/status
+  const isAdmin=SESSION.role==="admin";
+  const who=ticketAssignee(t);
+  // ----- right side -----
   let right;
-  if(SESSION.role==="admin" && (t.status==="unassigned")){
+  if(isAdmin && t.status==="unassigned"){
     right=`<div class="row-assign" onclick="event.stopPropagation()">
       <select class="input row-sel" id="rsel_${t._id}">
         <option value="">Assign to…</option>
-        <optgroup label="Repair Technicians">${Object.entries(MASTER.repairTechnicians||{}).map(([id,v])=>`<option value="tech:${id}">${esc(v.name)}</option>`).join("")}</optgroup>
-        <optgroup label="Approved Vendors">${Object.entries(VENDORS).map(([id,v])=>`<option value="vendor:${id}">${esc(v.name)}</option>`).join("")||'<option disabled>None</option>'}</optgroup>
+        <optgroup label="In-house techs">${Object.entries(MASTER.repairTechnicians||{}).map(([id,v])=>`<option value="tech:${id}">${esc(v.name)}</option>`).join("")}</optgroup>
+        <optgroup label="Third-party techs">${Object.entries(VENDORS).map(([id,v])=>`<option value="vendor:${id}">${esc(v.name)}</option>`).join("")||'<option disabled>None</option>'}</optgroup>
       </select>
       <button class="btn btn-primary btn-sm" onclick="rowAssign('${t._id}')">Assign</button>
     </div>`;
   }else{
-    let who="";
-    if(t.assignedTechId)who=techName(t.assignedTechId)||"Tech";
-    else if(t.assignedVendorId)who=VENDORS[t.assignedVendorId]?.name||"Vendor";
-    else if(storeTech(t.storeId))who=storeTech(t.storeId).name;
+    let sub="";
+    if(who) sub=who.name;
+    else if(storeTech(t.storeId)) sub=storeTech(t.storeId).name;
+    // status-specific subline
+    let extra="";
+    if(t.status==="dispatched"&&t.dispatchedAt) extra=`<div class="rs-meta">Dispatched ${fmtDateShort(t.dispatchedAt)}</div>`;
+    else if(t.status==="waiting"&&t.waitingReason) extra=`<div class="rs-meta wait">${esc(t.waitingReason)}</div>`;
+    else if(t.status==="in_progress"&&t.clockInAt) extra=`<div class="rs-meta prog">⏱ ${elapsedHM(t.clockInAt)}</div>`;
     right=`<div class="row-status" style="--tc:${st.color}">
-      <div class="rs-label">${st.label}</div>${who?`<div class="rs-who">${esc(who)}</div>`:""}</div>`;
+      <div class="rs-label">${st.label}</div>${sub?`<div class="rs-who">${esc(sub)}</div>`:""}${extra}</div>`;
+  }
+  // ----- below-row action bars (admin only) -----
+  let below="";
+  if(isAdmin){
+    if(t.status==="assigned" && who){
+      below=`<div class="row-bar" onclick="event.stopPropagation()">
+        <span>Contacted <b>${esc(who.name)}</b> already?</span>
+        <div class="rb-btns">
+          <button class="btn btn-primary btn-sm" onclick="confirmContact('${t._id}')">Yes</button>
+          <button class="btn btn-ghost btn-sm" onclick="openContact('${t._id}')">No</button>
+          <button class="btn btn-ghost btn-sm" onclick="rowUnassign('${t._id}')">Unassign</button>
+        </div></div>`;
+    }else if(t.status==="waiting" && who){
+      below=`<div class="row-bar" onclick="event.stopPropagation()">
+        <span><b>Waiting:</b> ${esc(t.waitingReason||"reason not set")}</span>
+        <div class="rb-btns">${contactBtns(t,who,"Tell "+who.name.split(" ")[0]+" wait is over")}</div></div>`;
+    }else if(t.status==="in_progress" && who){
+      below=`<div class="row-bar" onclick="event.stopPropagation()">
+        <span><b>In progress</b> · ${elapsedHM(t.clockInAt)}</span>
+        <div class="rb-btns">${contactBtns(t,who,"Contact "+who.name.split(" ")[0])}</div></div>`;
+    }
   }
   return `
+    <div class="row-wrap">
     <div class="row" onclick="openTicket('${t._id}')">
       <div class="row-main">
         <div class="row-top"><span class="row-store">${esc(storeName(t.storeId))} ${esc(storeNum(t.storeId))}</span></div>
@@ -845,15 +917,67 @@ function ticketRow(t){
         </div>
       </div>
       <div class="row-right">${right}</div>
-    </div>`;
+    </div>${below}</div>`;
 }
+// build whatever contact channels the person actually has info for
+function contactBtns(t,who,emailLabel){
+  let b="";
+  if(who.phone) b+=`<button class="btn btn-ghost btn-sm" onclick="draftContact('${t._id}','sms')">✉ Text</button>`;
+  if(who.email) b+=`<button class="btn btn-ghost btn-sm" onclick="draftContact('${t._id}','email')">@ Email</button>`;
+  if(!b) b=`<span class="rb-none">No contact info on file</span>`;
+  return b;
+}
+function fmtDateShort(ts){if(!ts)return"";const d=new Date(ts);return d.toLocaleDateString("en-US",{month:"numeric",day:"numeric"})}
 // inline assign from a row (admin)
 async function rowAssign(id){
   const sel=$("rsel_"+id); if(!sel||!sel.value){toast("Pick someone first","err");return}
   const val=sel.value; let patch,note;
-  if(val.startsWith("tech:")){const tid=val.slice(5);patch={assignedTechId:tid,assignedVendorId:null,status:"dispatched"};note="🔧 "+(techName(tid)||"tech")}
-  else{const vid=val.slice(7);patch={assignedVendorId:vid,assignedTechId:null,status:"assigned"};note="🏢 "+(VENDORS[vid]?.name||"vendor")}
+  if(val.startsWith("tech:")){const tid=val.slice(5);patch={assignedTechId:tid,assignedVendorId:null,status:"assigned"};note="🔧 "+(techName(tid)||"tech")}
+  else{const vid=val.slice(7);patch={assignedVendorId:vid,assignedTechId:null,status:"assigned"};note="🏢 "+(VENDORS[vid]?.name||"tech")}
   if(await patchTicket(id,patch,{action:"assign",note,toStatus:patch.status}))toast("Assigned · "+note);
+}
+// Yes, contacted → dispatched (with timestamp)
+async function confirmContact(id){
+  const who=ticketAssignee(TICKETS[id]);
+  if(await patchTicket(id,{status:"dispatched",dispatchedAt:now()},{action:"status",toStatus:"dispatched",note:who?("Contact confirmed: "+who.name):""}))
+    toast("Dispatched");
+}
+async function rowUnassign(id){
+  if(await patchTicket(id,{status:"unassigned",assignedTechId:null,assignedVendorId:null},{action:"assign",note:"unassigned (pool)",toStatus:"unassigned"}))
+    toast("Back to unassigned");
+}
+// No → choose how to reach out (drafts only; Twilio/SendGrid later)
+function openContact(id){draftContact(id,null)}
+function draftContact(id,channel){
+  const t=TICKETS[id], who=ticketAssignee(t);
+  if(!who){toast("No assignee","err");return}
+  const hasSms=!!who.phone, hasEmail=!!who.email;
+  // if a channel was requested directly, show that draft; else show a chooser
+  const chooser = !channel ? `
+    <div class="contact-choose">
+      ${hasSms?`<button class="btn btn-ghost btn-block" onclick="draftContact('${id}','sms')">✉ Text ${esc(who.phone)}</button>`:""}
+      ${hasEmail?`<button class="btn btn-ghost btn-block" onclick="draftContact('${id}','email')">@ Email ${esc(who.email)}</button>`:""}
+      ${(!hasSms&&!hasEmail)?`<div class="empty" style="padding:24px"><p>No phone or email on file for ${esc(who.name)}. Add it in their tech record.</p></div>`:""}
+    </div>` : "";
+  const draftMsg = `Hi ${who.name.split(" ")[0]}, regarding ticket ${t.shortId} at ${storeName(t.storeId)} (${storeNum(t.storeId)}): ${t.description||""}`.slice(0,300);
+  const draft = channel ? `
+    <div class="field"><label class="label">To</label>
+      <input class="input" value="${escA(channel==="sms"?who.phone:who.email)}" readonly></div>
+    <div class="field" style="margin-top:12px"><label class="label">${channel==="sms"?"Text message":"Email body"}</label>
+      <textarea class="input" id="draftBody" style="min-height:120px">${esc(draftMsg)}</textarea></div>
+    <div class="contact-note">Draft only — sending via ${channel==="sms"?"SMS (Twilio)":"email (SendGrid)"} will be wired up later.</div>` : "";
+  modal(`
+    <div class="sheet-head"><h2>Contact ${esc(who.name)}</h2><button class="x-btn" onclick="closeModal()">✕</button></div>
+    <div class="sheet-body">${chooser}${draft}</div>
+    <div class="sheet-foot">
+      ${channel?`<button class="btn btn-ghost" style="flex:1" onclick="draftContact('${id}',null)">← Back</button>
+        <button class="btn btn-primary" style="flex:1" onclick="markContacted('${id}')">Mark as contacted</button>`
+        :`<button class="btn btn-ghost btn-block" onclick="closeModal()">Cancel</button>`}
+    </div>`);
+}
+async function markContacted(id){
+  closeModal();
+  await confirmContact(id); // logging contact → dispatched, same as "Yes"
 }
 
 /* ============================================================ MODAL */
@@ -951,8 +1075,8 @@ function openTicket(id){
   const dir=storeDirector(sid), coach=storeCoach(sid), tech=storeTech(sid);
   // assignee: explicit tech dispatch > vendor > store's live tech (default routing)
   let assignee=null;
-  if(t.assignedTechId){const n=techName(t.assignedTechId);assignee=n?("🔧 "+n+" (dispatched)"):"Tech (removed)"}
-  else if(t.assignedVendorId){const v=VENDORS[t.assignedVendorId];assignee=v?("🏢 "+v.name+" (vendor)"):"Vendor (removed)"}
+  if(t.assignedTechId){const n=techName(t.assignedTechId);assignee=n?("🔧 "+n+" (in-house)"):"Tech (removed)"}
+  else if(t.assignedVendorId){const v=VENDORS[t.assignedVendorId];assignee=v?("🏢 "+v.name+" (third-party)"):"Tech (removed)"}
   else if(tech)assignee="🔧 "+tech.name+" (store tech)";
   const photos=(t.photos||[]).map(u=>`<img src="${escA(u)}" onclick="window.open('${escA(u)}','_blank')" alt="">`).join("");
   const activity=(t.activity||[]).slice().reverse().map(a=>`
@@ -1082,11 +1206,11 @@ function assignControls(t){
   return `<div style="display:flex;gap:10px">
     <select class="input" id="assignSel">
       <option value="">— Unassigned (pool) —</option>
-      <optgroup label="In-house techs → Dispatched">${techOpts||'<option disabled>None</option>'}</optgroup>
+      <optgroup label="In-house techs">${techOpts||'<option disabled>None</option>'}</optgroup>
       <optgroup label="Third-party vendors → Assigned">${venOpts||'<option disabled>No vendors added</option>'}</optgroup>
     </select>
     <button class="btn btn-primary" onclick="doAssign('${t._id}')">Set</button></div>
-    <div style="font-size:11px;color:var(--ink-dim);margin-top:7px">Tech → Dispatched · Vendor → Assigned</div>`;
+    <div style="font-size:11px;color:var(--ink-dim);margin-top:7px">Picking a tech sets the ticket to Assigned</div>`;
 }
 
 /* ============================================================ MUTATIONS */
@@ -1106,8 +1230,8 @@ async function setStatus(id,status){
 async function doAssign(id){
   const val=$("assignSel").value;
   let patch,note;
-  if(val.startsWith("tech:")){const tid=val.slice(5);patch={assignedTechId:tid,assignedVendorId:null,status:"dispatched"};note="🔧 "+(techName(tid)||"tech")}
-  else if(val.startsWith("vendor:")){const vid=val.slice(7);patch={assignedVendorId:vid,assignedTechId:null,status:"assigned"};note="🏢 "+(VENDORS[vid]?.name||"vendor")}
+  if(val.startsWith("tech:")){const tid=val.slice(5);patch={assignedTechId:tid,assignedVendorId:null,status:"assigned"};note="🔧 "+(techName(tid)||"tech")}
+  else if(val.startsWith("vendor:")){const vid=val.slice(7);patch={assignedVendorId:vid,assignedTechId:null,status:"assigned"};note="🏢 "+(VENDORS[vid]?.name||"tech")}
   else{patch={assignedVendorId:null,assignedTechId:null,status:"unassigned"};note="unassigned (pool)"}
   if(await patchTicket(id,patch,{action:"assign",note,toStatus:patch.status})){toast("Assignment updated");openTicket(id)}
 }
@@ -1171,19 +1295,19 @@ function openVendors(){
       <div class="v-meta">${esc([v.category,v.phone,v.email].filter(Boolean).join(" · ")||"No contact on file")}</div></div>
       <button class="btn btn-ghost btn-sm" onclick="editVendor('${id}')">Edit</button>
       <button class="btn btn-danger btn-sm" onclick="removeVendor('${id}')">Remove</button></div>`).join("");
-  modal(`<div class="sheet-head"><h2>Approved vendors</h2><button class="x-btn" onclick="closeModal()">✕</button></div>
+  modal(`<div class="sheet-head"><h2>Third-party techs</h2><button class="x-btn" onclick="closeModal()">✕</button></div>
     <div class="sheet-body">
-      <p style="color:var(--ink-dim);font-size:13px;margin-top:0">Third-party vendors for assignment.</p>
-      <div id="vendorRows">${rows||'<div class="empty" style="padding:34px"><div class="empty-mark">🏢</div><h3>No vendors yet</h3><p>Add your first approved vendor below.</p></div>'}</div>
-      <button class="btn btn-ghost btn-block" style="margin-top:14px" onclick="editVendor(null)">＋ Add vendor</button>
+      <p style="color:var(--ink-dim);font-size:13px;margin-top:0">Outside techs available for assignment.</p>
+      <div id="vendorRows">${rows||'<div class="empty" style="padding:34px"><div class="empty-mark">🏢</div><h3>No third-party techs yet</h3><p>Add your first outside techdor below.</p></div>'}</div>
+      <button class="btn btn-ghost btn-block" style="margin-top:14px" onclick="editVendor(null)">＋ Add tech</button>
     </div>
     <div class="sheet-foot"><button class="btn btn-ghost btn-block" onclick="closeModal()">Done</button></div>`);
 }
 function editVendor(id){
   const v=id?VENDORS[id]:{};
-  modal(`<div class="sheet-head"><h2>${id?"Edit vendor":"Add vendor"}</h2><button class="x-btn" onclick="openVendors()">✕</button></div>
+  modal(`<div class="sheet-head"><h2>${id?"Edit third-party tech":"Add third-party tech"}</h2><button class="x-btn" onclick="openVendors()">✕</button></div>
     <div class="sheet-body">
-      <div class="field"><label class="label">Vendor name</label><input class="input" id="vName" value="${escA(v.name||"")}" placeholder="e.g. Lone Star HVAC"></div>
+      <div class="field"><label class="label">Tech / company name</label><input class="input" id="vName" value="${escA(v.name||"")}" placeholder="e.g. Lone Star HVAC"></div>
       <div class="field" style="margin-top:14px"><label class="label">Category / specialty</label><input class="input" id="vCat" value="${escA(v.category||"")}" placeholder="e.g. Refrigeration, Plumbing"></div>
       <div style="display:flex;gap:12px;margin-top:14px">
         <div class="field" style="flex:1"><label class="label">Phone</label><input class="input" id="vPhone" value="${escA(v.phone||"")}"></div>
@@ -1201,7 +1325,7 @@ async function saveVendor(id){
   catch(e){toast(e.message||"Could not save vendor","err");btn.disabled=false;btn.textContent="Save"}
 }
 async function removeVendor(id){
-  if(!confirm("Remove this vendor? Tickets dispatched to them will fall back to the store's tech."))return;
+  if(!confirm("Remove this third-party tech? Their tickets will fall back to the store's tech."))return;
   try{await apiWrite(`${VENDORS_NODE}/${id}`,null);await refresh();toast("Vendor removed");openVendors()}
   catch(e){toast(e.message||"Could not remove vendor","err")}
 }
