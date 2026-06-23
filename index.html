@@ -15,7 +15,7 @@
   --ink:#1a2230; --ink-mid:#51607a; --ink-dim:#8a96a8;
   --amber:#f59e0b; --amber-deep:#b45309;
   --blue:#2563eb; --green:#059669; --red:#dc2626; --violet:#7c3aed; --cyan:#0891b2;
-  --s-open:#2563eb; --s-assigned:#7c3aed; --s-progress:#0891b2; --s-waiting:#d97706;
+  --s-open:#dc2626; --s-assigned:#7c3aed; --s-progress:#1e3a8a; --s-waiting:#ea7317;
   --s-finished:#059669; --s-resolved:#047857; --s-closed:#8a96a8;
   --radius:10px; --radius-sm:7px; --shadow:0 8px 26px rgba(40,55,80,.12);
   --mono:'JetBrains Mono',ui-monospace,monospace;
@@ -95,8 +95,17 @@ body.no-reftags .reftag{display:none}
 .page-title{font-family:var(--disp);font-weight:900;font-size:26px;letter-spacing:-.01em;line-height:1.05}
 .page-meta{font-family:var(--mono);font-size:11px;color:var(--ink-dim);letter-spacing:.1em;text-transform:uppercase;margin-top:5px}
 .head-actions{display:flex;gap:10px;flex-wrap:wrap}
-/* ===== STATUS TILES (color-coded, active filled) ===== */
-.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(116px,1fr));gap:8px;margin-bottom:16px}
+/* ===== STATUS TILES (Open + Closed always; middle 6 expand) ===== */
+.tiles-wrap{display:flex;align-items:stretch;gap:8px;margin-bottom:16px}
+.tiles-wrap>.tile{flex:1 1 0;min-width:120px}
+.tiles-exp{flex:0 0 auto;width:40px;border:2px dashed var(--line);background:var(--panel);border-radius:11px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer;transition:.15s;color:var(--ink-dim)}
+.tiles-exp:hover{border-color:var(--amber);color:var(--amber)}
+.exp-chevs{font-size:15px;font-weight:700;letter-spacing:-1px}
+.exp-hint{font-family:var(--mono);font-size:8px;letter-spacing:.1em;text-transform:uppercase;writing-mode:vertical-rl}
+.tiles-wrap.expanded .tiles-exp{display:none}
+.tiles-mid{display:flex;gap:8px;overflow:hidden;max-width:0;opacity:0;transition:max-width .35s ease,opacity .25s ease}
+.tiles-mid>.tile{flex:1 1 0;min-width:118px}
+.tiles-wrap.expanded .tiles-mid{max-width:1400px;opacity:1}
 .tile{background:var(--panel);border:2px solid var(--line);border-radius:11px;padding:11px 12px;text-align:center;transition:.13s;font-family:inherit;cursor:pointer;border-top:3px solid var(--tc)}
 .tile:hover{border-color:var(--tc);transform:translateY(-1px)}
 .tile.on{background:var(--tc);border-color:var(--tc)}
@@ -262,8 +271,14 @@ body.simulating .wrap{padding-bottom:40px}
   .brand-name{font-size:15px}
   .who-name{max-width:30vw;font-size:12px}
   .icon-btn{width:40px;height:40px}
-  /* tiles: 2-up grid on phones, still tappable */
-  .tiles{grid-template-columns:repeat(2,1fr);gap:7px}
+  /* tiles: Open + expander + Closed on top row; middle 6 drop below when expanded */
+  .tiles-wrap{flex-wrap:wrap}
+  .tiles-wrap>.tile{flex:1 1 38%;min-width:0}
+  .tiles-exp{width:auto;flex:1 1 100%;flex-direction:row;padding:8px;order:3}
+  .exp-hint{writing-mode:horizontal-tb}
+  .tiles-mid{flex:1 1 100%;order:4;max-width:none;max-height:0;flex-wrap:wrap;transition:max-height .35s ease,opacity .25s ease}
+  .tiles-mid>.tile{flex:1 1 30%;min-width:0}
+  .tiles-wrap.expanded .tiles-mid{max-height:400px}
   .tile-n{font-size:22px}
   /* controls stack */
   .board-controls{flex-direction:column;align-items:stretch}
@@ -290,7 +305,7 @@ body.simulating .wrap{padding-bottom:40px}
   .login-card{max-width:100%}
 }
 @media(max-width:380px){
-  .tiles{grid-template-columns:repeat(2,1fr)}
+  .tiles-mid>.tile{flex:1 1 45%}
   .tile-s{display:none}
 }
 @media(max-width:600px){.input,textarea.input,select.input{font-size:16px}}
@@ -373,7 +388,7 @@ const VENDORS_NODE = "maintenanceVendors";
 const STATUSES = {
   unassigned:{label:"Unassigned",color:"var(--s-open)"},
   assigned:{label:"Assigned (Vendor)",color:"var(--s-assigned)"},
-  dispatched:{label:"Dispatched",color:"var(--violet)"},
+  dispatched:{label:"Dispatched",color:"var(--blue)"},
   waiting:{label:"Waiting",color:"var(--s-waiting)"},
   in_progress:{label:"In Progress",color:"var(--s-progress)"},
   finished:{label:"Finished",color:"var(--s-finished)"},
@@ -392,7 +407,7 @@ const ROLE_PREFIX = {admin:"o",director:"d",coach:"a",tech:"r",manager:"m"};
 /* ============================================================ STATE */
 let MASTER=null, SESSION=null;
 let TICKETS={}, VENDORS={}, RESTAURANTS={};
-let curFilter="active", curSearch="", curStore="all";
+let curFilter="active", curSearch="", curStore="all", tilesExpanded=false;
 let openGroups={};          // storeId -> bool (expanded)
 let managerScreen="hub";
 let pollTimer=null;
@@ -710,24 +725,33 @@ function renderBoard(){
   else if(SESSION.role==="manager"){title=storeName(SESSION.storeId);meta=storeNum(SESSION.storeId)}
   else{title=ROLE_LABEL[SESSION.role]+" board";meta=`${storeIds.length} stores in your area`}
 
-  // big color-coded status tiles (active one filled)
-  const tiles=[
-    tile("active",activeN,"ACTIVE","All open work","var(--amber)"),
+  // Open (yellow) = all not-closed; Closed (grey) always visible.
+  // The 6 lifecycle tiles in between expand on hover (desktop) / tap (touch).
+  const midTiles=[
     tile("unassigned",cnt("unassigned"),"UNASSIGNED","Needs an owner","var(--s-open)"),
     tile("assigned",cnt("assigned"),"ASSIGNED","Vendor chosen","var(--s-assigned)"),
-    tile("dispatched",cnt("dispatched"),"DISPATCHED","Sent to tech","var(--violet)"),
+    tile("dispatched",cnt("dispatched"),"DISPATCHED","Sent to tech","var(--blue)"),
     tile("waiting",cnt("waiting"),"WAITING","On hold","var(--s-waiting)"),
     tile("in_progress",cnt("in_progress"),"IN PROGRESS","Being worked","var(--s-progress)"),
     tile("finished",cnt("finished"),"FINISHED","Work done","var(--s-finished)"),
-    SESSION.role==="admin"?tile("closed",cnt("closed"),"CLOSED","No follow-up","var(--s-closed)"):"",
   ].join("");
+  const tilesBlock=`
+    <div class="tiles-wrap ${tilesExpanded?"expanded":""}" id="tilesWrap"
+         onmouseenter="expandTiles(true)" onmouseleave="expandTiles(false)">
+      ${tile("active",activeN,"OPEN","All not closed","var(--amber)")}
+      <button class="tiles-exp" onclick="toggleTiles()" title="Show all statuses" aria-label="Show all statuses">
+        <span class="exp-chevs">⟨ ⟩</span><span class="exp-hint">statuses</span>
+      </button>
+      <div class="tiles-mid">${midTiles}</div>
+      ${tile("closed",cnt("closed"),"CLOSED","No follow-up","var(--s-closed)")}
+    </div>`;
 
   const head=`
     <div class="page-head">
       <div><div class="page-title">${esc(title)}</div><div class="page-meta">${esc(meta)}</div></div>
       <div class="head-actions">${canCreate()?`<button class="btn btn-primary btn-sm" onclick="openCreate()">＋ New ticket</button>`:""}</div>
     </div>
-    <div class="tiles">${tiles}</div>
+    ${tilesBlock}
     <div class="board-controls">
       ${storeIds.length>1?`<select class="input loc-select" onchange="curStore=this.value;render()">
         <option value="all"${curStore==="all"?" selected":""}>All stores (${storeIds.length})</option>
@@ -742,7 +766,7 @@ function renderBoard(){
   let rows=allTickets.slice();
   if(curStore!=="all") rows=rows.filter(t=>t.storeId===curStore);
   rows=applyFilterSearch(rows);
-  const label=({active:"Active",all:"All",unassigned:"Unassigned",assigned:"Assigned",dispatched:"Dispatched",waiting:"Waiting",in_progress:"In Progress",finished:"Finished",closed:"Closed"})[curFilter]||"";
+  const label=({active:"Open",all:"All",unassigned:"Unassigned",assigned:"Assigned",dispatched:"Dispatched",waiting:"Waiting",in_progress:"In Progress",finished:"Finished",closed:"Closed"})[curFilter]||"";
   const listHead=`<div class="list-head">${esc(label)} tickets <span class="lh-n">(${rows.length})</span></div>`;
   const body = rows.length
     ? `<div class="rows">${rows.map(ticketRow).join("")}</div>`
@@ -755,6 +779,19 @@ function renderBoard(){
     return `<button class="tile ${on?"on":""}" style="--tc:${c}" onclick="curFilter='${key}';render()">
       <div class="tile-l">${label}</div><div class="tile-n">${n}</div><div class="tile-s">${sub}</div></button>`;
   }
+}
+// expand the middle status tiles. Hover toggles on desktop; tap (the ⟨ ⟩ button)
+// pins it open/closed for touch devices. We avoid re-render to keep the CSS animation.
+let _tilePinned=false;
+function expandTiles(on){
+  if(_tilePinned)return;            // a tap-pin overrides hover
+  const w=$("tilesWrap"); if(w)w.classList.toggle("expanded",on);
+  tilesExpanded=on;
+}
+function toggleTiles(){
+  _tilePinned=!_tilePinned;
+  tilesExpanded=_tilePinned;
+  const w=$("tilesWrap"); if(w)w.classList.toggle("expanded",_tilePinned);
 }
 
 function applyFilterSearch(list){
