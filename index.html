@@ -122,6 +122,13 @@ body.no-reftags .reftag{display:none}
 .search{flex:1;min-width:160px}
 .list-head{font-family:var(--disp);font-weight:800;font-size:18px;margin:0 0 12px}
 .list-head .lh-n{color:var(--ink-dim);font-weight:600}
+.bulk-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;padding:10px 12px;background:var(--panel);border:1px solid var(--line);border-radius:10px}
+.bulk-bar.active{background:#fff7e6;border-color:var(--amber)}
+.bulk-all{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;cursor:pointer}
+.bulk-count{font-family:var(--mono);font-size:12px;color:var(--ink-mid);margin-right:auto}
+.row-chk{display:flex;align-items:center;padding-right:4px;cursor:pointer}
+.row-chk input{width:18px;height:18px;cursor:pointer}
+.row.row-selected{border-color:var(--amber);background:#fff7e6}
 
 /* ===== HORIZONTAL TICKET ROWS ===== */
 .rows{display:flex;flex-direction:column;gap:8px}
@@ -137,10 +144,9 @@ body.no-reftags .reftag{display:none}
 .r-id{color:var(--ink-dim);letter-spacing:.03em}
 .r-sep{opacity:.5}
 .r-pri{font-weight:700;text-transform:uppercase;font-size:10px;letter-spacing:.04em}
-.r-pri.u{color:#fff;background:var(--red);padding:2px 7px;border-radius:4px}
-.r-pri.h{color:var(--red)}
 .r-pri.n{color:var(--green)}
-.r-pri.l{color:var(--ink-dim)}
+.r-pri.u{color:#7a5b00;background:#ffd84d;padding:2px 7px;border-radius:4px;font-weight:700}
+.r-pri.e{color:#fff;background:var(--red);padding:2px 7px;border-radius:4px;font-weight:700}
 .row-right{flex:0 0 auto;display:flex;align-items:center}
 .row-assign{display:flex;gap:8px;align-items:center}
 .row-sel{padding:9px 11px;font-size:13px;min-width:150px}
@@ -418,7 +424,7 @@ const STATUS_ORDER = ["unassigned","assigned","dispatched","waiting","in_progres
 const ACTIVE_STATUSES = ["unassigned","assigned","dispatched","waiting","in_progress","finished"];
 const CATEGORIES = {plumbing:"Plumbing",equipment:"Equipment",hvac:"HVAC",electrical:"Electrical",it:"IT / POS",structural:"Structural",safety:"Safety",other:"Other"};
 const CAT_PREFIX = {plumbing:"PLM",equipment:"EQP",hvac:"HVC",electrical:"ELE",it:"IT",structural:"STR",safety:"SAF",other:"GEN"};
-const PRIORITIES = {low:"Low",normal:"Normal",high:"High",urgent:"Urgent"};
+const PRIORITIES = {normal:"Normal",urgent:"Urgent",emergency:"Emergency"};
 const WAITING_REASONS = ["Awaiting parts","Awaiting third-party tech","Awaiting approval","Awaiting access","Scheduled — future date","Other"];
 const ROLE_LABEL = {admin:"Overwatch",director:"Director",coach:"Area Coach",manager:"Store Manager",tech:"Repair Tech"};
 const ROLE_PREFIX = {admin:"o",director:"d",coach:"a",tech:"r",manager:"m"};
@@ -428,6 +434,7 @@ let MASTER=null, SESSION=null;
 let REPLY_NUMBERS={}; // email(lowercased) -> reply phone number, stored in master
 let TICKETS={}, VENDORS={}, RESTAURANTS={};
 let curFilter="active", curSearch="", curStore="all", tilesExpanded=false, curAssignee="all";
+let selectMode=false, selectedIds={}; // bulk-action selection (finished/closed pages)
 let openGroups={};          // storeId -> bool (expanded)
 let managerScreen="hub";
 let pollTimer=null;
@@ -799,7 +806,33 @@ function renderBoard(){
   if(curStore!=="all") rows=rows.filter(t=>t.storeId===curStore);
   rows=applyFilterSearch(rows);
   const label=({active:"Open",all:"All",unassigned:"Unassigned",assigned:"Assigned",dispatched:"Dispatched",waiting:"Waiting",in_progress:"In Progress",finished:"Finished",closed:"Closed"})[curFilter]||"";
-  const listHead=`<div class="list-head">${esc(label)} tickets <span class="lh-n">(${rows.length})</span></div>`;
+  // bulk-action bar — admin only, on the finished & closed pages
+  const bulkable = SESSION.role==="admin" && (curFilter==="finished"||curFilter==="closed");
+  const visibleIds = rows.map(t=>t._id);
+  const selCount = visibleIds.filter(id=>selectedIds[id]).length;
+  let bulkBar="";
+  if(bulkable){
+    if(!selectMode){
+      bulkBar=`<div class="bulk-bar">
+        <button class="btn btn-ghost btn-sm" onclick="startSelect()">☑ Select</button>
+        ${curFilter==="finished"
+          ? `<button class="btn btn-primary btn-sm" onclick="confirmBulk('closeAll')">Close out all finished (${rows.length})</button>`
+          : `<button class="btn btn-ghost btn-sm" onclick="openReopenAll()">↩ Reopen by date…</button>`}
+      </div>`;
+    }else{
+      const moveBtns = curFilter==="finished"
+        ? `<button class="btn btn-primary btn-sm" ${selCount?"":"disabled"} onclick="confirmBulk('closeSel')">Close out (${selCount})</button>`
+        : `<button class="btn btn-ghost btn-sm" ${selCount?"":"disabled"} onclick="confirmBulk('toFinished')">→ Finished (${selCount})</button>
+           <button class="btn btn-ghost btn-sm" ${selCount?"":"disabled"} onclick="confirmBulk('toUnassigned')">→ Unassigned (${selCount})</button>`;
+      bulkBar=`<div class="bulk-bar active">
+        <label class="bulk-all"><input type="checkbox" ${selCount===rows.length&&rows.length?"checked":""} onchange="toggleAllVisible(this.checked)"> All</label>
+        <span class="bulk-count">${selCount} selected</span>
+        ${moveBtns}
+        <button class="btn btn-ghost btn-sm" onclick="endSelect()">Cancel</button>
+      </div>`;
+    }
+  }
+  const listHead=`<div class="list-head">${esc(label)} tickets <span class="lh-n">(${rows.length})</span></div>${bulkBar}`;
   const body = rows.length
     ? `<div class="rows">${rows.map(ticketRow).join("")}</div>`
     : `<div class="empty"><div class="empty-mark">🗂️</div><h3>Nothing here</h3><p>${curSearch?"No tickets match your search.":"No tickets in this view."}</p></div>`;
@@ -815,7 +848,7 @@ function renderBoard(){
 }
 // choosing OPEN or CLOSED unpins the strip; a middle status keeps it open
 function pickStatus(key){
-  curFilter=key; curAssignee="all";
+  curFilter=key; curAssignee="all"; selectMode=false; selectedIds={};
   if(key==="active"||key==="closed"){_tilePinned=false;tilesExpanded=false;}
   render();
 }
@@ -877,7 +910,7 @@ function ticketRow(t){
   const st=STATUSES[t.status]||STATUSES.unassigned;
   const cat=CATEGORIES[t.category]||"Other";
   const pri=t.priority||"normal";
-  const priClass={urgent:"u",high:"h",normal:"n",low:"l"}[pri]||"n";
+  const priClass={normal:"n",urgent:"u",emergency:"e"}[pri]||"n";
   const photoN=(t.photos||[]).length;
   const isAdmin=SESSION.role==="admin";
   const who=ticketAssignee(t);
@@ -923,14 +956,31 @@ function ticketRow(t){
       below=`<div class="row-bar" onclick="event.stopPropagation()">
         <span><b>In progress</b> · ${elapsedHM(t.clockInAt)}</span>
         <div class="rb-btns">${contactBtns(t,who,"Contact "+who.name.split(" ")[0])}</div></div>`;
+    }else if(t.status==="finished"){
+      below=`<div class="row-bar" onclick="event.stopPropagation()">
+        <span><b>Finished</b> — ready to close out?</span>
+        <div class="rb-btns"><button class="btn btn-primary btn-sm" onclick="setStatus('${t._id}','closed')">Close out</button></div></div>`;
+    }else if(t.status==="closed"){
+      below=`<div class="row-bar" onclick="event.stopPropagation()">
+        <span><b>Closed</b> — reopen to?</span>
+        <div class="rb-btns">
+          <button class="btn btn-ghost btn-sm" onclick="setStatus('${t._id}','finished')">→ Finished</button>
+          <button class="btn btn-ghost btn-sm" onclick="setStatus('${t._id}','unassigned')">→ Unassigned</button>
+        </div></div>`;
     }
   }
+  // selection checkbox (select mode, finished/closed pages)
+  const showChk = selectMode && (curFilter==="finished"||curFilter==="closed");
+  const chk = showChk ? `<label class="row-chk" onclick="event.stopPropagation()"><input type="checkbox" ${selectedIds[t._id]?"checked":""} onchange="toggleSel('${t._id}',this.checked)"></label>` : "";
+  const rowClick = showChk ? `toggleSel('${t._id}',!selectedIds['${t._id}'])` : `openTicket('${t._id}')`;
   // On the OPEN page, tint each row subtly with its status color; sub-pages are mono-status already.
   const tint = (curFilter==="active") ? ` style="--rt:${st.color}"` : "";
   const tintClass = (curFilter==="active") ? " tinted" : "";
+  const selClass = (showChk && selectedIds[t._id]) ? " row-selected" : "";
   return `
     <div class="row-wrap">
-    <div class="row${tintClass}"${tint} onclick="openTicket('${t._id}')">
+    <div class="row${tintClass}${selClass}"${tint} onclick="${rowClick}">
+      ${chk}
       <div class="row-main">
         <div class="row-top"><span class="row-store">${esc(storeName(t.storeId))}</span></div>
         <div class="row-desc">${esc(t.description||"No description")}</div>
@@ -1261,6 +1311,92 @@ async function patchTicket(id,patch,activityEntry){
 async function setStatus(id,status){
   if(TICKETS[id].status===status){toast("Already in that status");return}
   if(await patchTicket(id,{status},{action:"status",toStatus:status})){toast(`Status → ${STATUSES[status].label}`);openTicket(id)}
+}
+
+/* ============================================================ BULK ACTIONS (admin, finished/closed pages) */
+function startSelect(){selectMode=true;selectedIds={};render()}
+function endSelect(){selectMode=false;selectedIds={};render()}
+function toggleSel(id,on){if(on)selectedIds[id]=true;else delete selectedIds[id];render()}
+function toggleAllVisible(on){
+  // current visible rows under the active filter+store+search
+  const rows=currentVisibleRows();
+  selectedIds={}; if(on)rows.forEach(t=>selectedIds[t._id]=true);
+  render();
+}
+function currentVisibleRows(){
+  let rows=[]; myStoreIds().forEach(sid=>rows=rows.concat(ticketsForStore(sid)));
+  if(curStore!=="all")rows=rows.filter(t=>t.storeId===curStore);
+  return applyFilterSearch(rows);
+}
+// run a status change across many tickets, sequentially, with a progress toast
+async function bulkSetStatus(ids,status){
+  if(!ids.length){toast("Nothing selected","err");return}
+  showLoader(true);
+  let done=0,failed=0;
+  for(const id of ids){
+    const t=TICKETS[id]; if(!t){failed++;continue}
+    const activity=Array.isArray(t.activity)?t.activity.slice():[];
+    activity.push({ts:now(),by:SESSION.name,role:SESSION.role,action:"status",toStatus:status,note:"bulk"});
+    try{await apiWrite(`${TICKETS_NODE}/${id}`,{...t,status,activity,updatedAt:now()});done++;}
+    catch(e){failed++;}
+    if(done%10===0)$("pollTxt")&&($("pollTxt").textContent=`${done}/${ids.length}`);
+  }
+  await refresh();showLoader(false);
+  selectMode=false;selectedIds={};
+  render();
+  toast(`${done} moved to ${STATUSES[status].label}${failed?` · ${failed} failed`:""}`);
+}
+// confirmation wrappers
+function confirmBulk(kind){
+  const visible=currentVisibleRows();
+  const selIds=visible.filter(t=>selectedIds[t._id]).map(t=>t._id);
+  let ids,status,msg;
+  if(kind==="closeAll"){ids=visible.map(t=>t._id);status="closed";msg=`Close out all ${ids.length} finished tickets?`;}
+  else if(kind==="closeSel"){ids=selIds;status="closed";msg=`Close out ${ids.length} selected ticket(s)?`;}
+  else if(kind==="toFinished"){ids=selIds;status="finished";msg=`Move ${ids.length} ticket(s) back to Finished?`;}
+  else if(kind==="toUnassigned"){ids=selIds;status="unassigned";msg=`Reopen ${ids.length} ticket(s) to Unassigned?`;}
+  if(!ids.length){toast("Nothing to do","err");return}
+  modal(`<div class="sheet-head"><h2>Are you sure?</h2><button class="x-btn" onclick="closeModal()">✕</button></div>
+    <div class="sheet-body"><p style="font-size:15px">${esc(msg)}</p></div>
+    <div class="sheet-foot">
+      <button class="btn btn-ghost" style="flex:1" onclick="closeModal()">No</button>
+      <button class="btn btn-primary" style="flex:1" onclick="closeModal();bulkSetStatus(${JSON.stringify(ids)},'${status}')">Yes</button>
+    </div>`);
+}
+// reopen-all-by-date (closed page) — window picker + second confirm
+function openReopenAll(){
+  modal(`<div class="sheet-head"><h2>Reopen closed tickets</h2><button class="x-btn" onclick="closeModal()">✕</button></div>
+    <div class="sheet-body">
+      <p style="color:var(--ink-dim);font-size:13px;margin-top:0">This reopens closed tickets within a time window. Choose how far back, then confirm.</p>
+      <div class="field"><label class="label">How far back?</label>
+        <select class="input" id="reopenWindow">
+          <option value="30">Last month (30 days)</option>
+          <option value="120">Last quarter (120 days)</option>
+          <option value="365">Last year (365 days)</option>
+        </select></div>
+      <div class="field" style="margin-top:14px"><label class="label">Reopen to</label>
+        <select class="input" id="reopenTarget"><option value="finished">Finished</option><option value="unassigned">Unassigned</option></select></div>
+    </div>
+    <div class="sheet-foot">
+      <button class="btn btn-ghost" style="flex:1" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" style="flex:1" onclick="confirmReopenAll()">Continue</button>
+    </div>`);
+}
+function confirmReopenAll(){
+  const days=parseInt($("reopenWindow").value,10), target=$("reopenTarget").value;
+  const cutoff=now()-days*86400000;
+  // closed tickets whose close happened within the window (use updatedAt as the close time)
+  const ids=currentVisibleRows().filter(t=>t.status==="closed" && (t.updatedAt||t.createdAt||0)>=cutoff).map(t=>t._id);
+  const winLabel={30:"last 30 days",120:"last 120 days",365:"last year"}[days];
+  closeModal();
+  if(!ids.length){toast(`No closed tickets in the ${winLabel}`,"err");return}
+  modal(`<div class="sheet-head"><h2>Confirm — this is a big change</h2><button class="x-btn" onclick="closeModal()">✕</button></div>
+    <div class="sheet-body"><p style="font-size:15px">Reopen <b>${ids.length}</b> tickets closed in the <b>${winLabel}</b> to <b>${STATUSES[target].label}</b>?</p>
+      <p style="color:var(--red);font-size:13px">They will return to active boards across the app.</p></div>
+    <div class="sheet-foot">
+      <button class="btn btn-ghost" style="flex:1" onclick="closeModal()">No, cancel</button>
+      <button class="btn btn-danger" style="flex:1" onclick="closeModal();bulkSetStatus(${JSON.stringify(ids)},'${target}')">Yes, reopen ${ids.length}</button>
+    </div>`);
 }
 async function doAssign(id){
   const val=$("assignSel").value;
