@@ -95,54 +95,47 @@ body.no-reftags .reftag{display:none}
 .page-title{font-family:var(--disp);font-weight:900;font-size:26px;letter-spacing:-.01em;line-height:1.05}
 .page-meta{font-family:var(--mono);font-size:11px;color:var(--ink-dim);letter-spacing:.1em;text-transform:uppercase;margin-top:5px}
 .head-actions{display:flex;gap:10px;flex-wrap:wrap}
-.statline{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px}
-.stat{flex:1;min-width:96px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;position:relative;overflow:hidden}
-.stat .bar{position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--amber)}
-.statbtn{cursor:pointer;text-align:left;transition:.13s;font-family:inherit}
-.statbtn:hover{border-color:var(--ink-dim)}
-.statbtn.on{border-color:var(--amber);box-shadow:0 0 0 2px rgba(245,158,11,.15)}
-.stat-n{font-family:var(--disp);font-weight:800;font-size:24px;line-height:1}
-.stat-l{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-dim);margin-top:6px}
-.filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-.filter-bar{display:flex;align-items:flex-start;gap:12px;margin-bottom:12px}
-.filter-bar-label{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-dim);padding-top:9px;width:64px;flex-shrink:0;text-align:right}
-.loc-select{max-width:340px}
-.chip{background:var(--panel);border:1px solid var(--line);color:var(--ink-mid);padding:7px 13px;border-radius:20px;font-size:13px;font-weight:500;transition:.13s}
-.chip:hover{border-color:var(--ink-dim);color:var(--ink)}
-.chip.on{background:var(--amber);color:#1a1305;border-color:var(--amber-deep);font-weight:700}
-.search{flex:1;min-width:180px}
+/* ===== STATUS TILES (color-coded, active filled) ===== */
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(116px,1fr));gap:8px;margin-bottom:16px}
+.tile{background:var(--panel);border:2px solid var(--line);border-radius:11px;padding:11px 12px;text-align:center;transition:.13s;font-family:inherit;cursor:pointer;border-top:3px solid var(--tc)}
+.tile:hover{border-color:var(--tc);transform:translateY(-1px)}
+.tile.on{background:var(--tc);border-color:var(--tc)}
+.tile-l{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--tc)}
+.tile.on .tile-l{color:#fff}
+.tile-n{font-family:var(--disp);font-weight:900;font-size:26px;line-height:1.1;color:var(--ink)}
+.tile.on .tile-n{color:#fff}
+.tile-s{font-size:9.5px;color:var(--ink-dim);margin-top:2px;line-height:1.25}
+.tile.on .tile-s{color:rgba(255,255,255,.85)}
+.board-controls{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;align-items:center}
+.loc-select{max-width:300px;flex:0 1 auto}
+.search{flex:1;min-width:160px}
+.list-head{font-family:var(--disp);font-weight:800;font-size:18px;margin:0 0 12px}
+.list-head .lh-n{color:var(--ink-dim);font-weight:600}
 
-/* ===== STORE GROUPS ===== */
-.store-group{margin-bottom:18px;border:1px solid var(--line);border-radius:13px;overflow:hidden;background:var(--panel)}
-.sg-head{display:flex;align-items:center;gap:12px;padding:14px 16px;cursor:pointer;transition:.13s;background:var(--panel-2)}
-.sg-head:hover{background:#eef1f6}
-.sg-chev{color:var(--ink-dim);font-size:13px;transition:.2s;width:14px}
-.sg-head.open .sg-chev{transform:rotate(90deg)}
-.sg-name{font-weight:700;font-size:15px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.sg-num{font-family:var(--mono);font-size:11px;color:var(--amber);letter-spacing:.04em}
-.sg-count{font-family:var(--mono);font-size:11px;color:var(--ink-mid);background:var(--ground);border:1px solid var(--line);padding:3px 9px;border-radius:20px}
-.sg-people{display:flex;gap:10px;flex-wrap:wrap;padding:0 16px 12px;font-size:11px;color:var(--ink-dim)}
-.sg-people span b{color:var(--ink-mid);font-weight:600}
-.sg-body{padding:12px 16px 16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;border-top:1px solid var(--line-soft)}
-.sg-actions{padding:12px 16px;border-top:1px solid var(--line-soft);display:flex;gap:10px}
-
-/* ===== TICKET CARDS ===== */
-.tk{background:var(--ground);border:1px solid var(--line);border-radius:11px;overflow:hidden;transition:.15s;cursor:pointer;display:flex;flex-direction:column}
-.tk:hover{border-color:var(--ink-dim);transform:translateY(-2px);box-shadow:var(--shadow)}
-.tk-top{display:flex;align-items:center;gap:9px;padding:12px 14px 0}
-.tk-id{font-family:var(--mono);font-size:11px;color:var(--ink-dim)}
-.tk-top-spacer{flex:1}
+/* ===== HORIZONTAL TICKET ROWS ===== */
+.rows{display:flex;flex-direction:column;gap:8px}
+.row{display:flex;align-items:center;gap:14px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 15px;cursor:pointer;transition:.12s}
+.row:hover{border-color:var(--ink-dim);box-shadow:var(--shadow)}
+.row-main{flex:1;min-width:0}
+.row-top{display:flex;align-items:center;gap:8px;margin-bottom:2px}
+.row-store{font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row-desc{color:var(--ink-mid);font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:4px}
+.row-meta{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--ink-dim);flex-wrap:wrap}
+.r-id{color:var(--ink-dim);letter-spacing:.03em}
+.r-sep{opacity:.5}
+.r-pri{font-weight:700;text-transform:uppercase;font-size:10px;letter-spacing:.04em}
+.r-pri.u{color:#fff;background:var(--red);padding:2px 7px;border-radius:4px}
+.r-pri.h{color:var(--red)}
+.r-pri.n{color:var(--green)}
+.r-pri.l{color:var(--ink-dim)}
+.row-right{flex:0 0 auto;display:flex;align-items:center}
+.row-assign{display:flex;gap:8px;align-items:center}
+.row-sel{padding:9px 11px;font-size:13px;min-width:150px}
+.row-status{text-align:right;min-width:90px}
+.rs-label{font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--tc)}
+.rs-who{font-size:12px;color:var(--ink);font-weight:600;margin-top:2px}
 .sbadge{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:4px 9px;border-radius:6px;display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
 .sbadge .dot{width:6px;height:6px;border-radius:50%;background:currentColor}
-.tk-body{padding:9px 14px 13px;flex:1;display:flex;flex-direction:column}
-.tk-desc{color:var(--ink-mid);font-size:13.5px;margin:0 0 11px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;flex:1}
-.tk-foot{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:auto}
-.tag{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;padding:3px 8px;border-radius:5px;background:var(--panel-2);border:1px solid var(--line-soft);color:var(--ink-mid)}
-.tag.cat{color:var(--violet);border-color:rgba(167,139,250,.3)}
-.tag.pri-high{color:var(--red);border-color:rgba(248,113,113,.35)}
-.tag.pri-urgent{color:#fff;background:var(--red);border-color:var(--red)}
-.tk-photos{display:flex;gap:5px;margin-top:9px}
-.tk-photos img{width:32px;height:32px;border-radius:6px;object-fit:cover;border:1px solid var(--line)}
 
 .empty{text-align:center;padding:54px 20px;color:var(--ink-dim);border:1px dashed var(--line);border-radius:14px;background:rgba(255,255,255,.01)}
 .empty-mark{font-size:34px;margin-bottom:12px;opacity:.5}
@@ -262,49 +255,43 @@ body.simulating .wrap{padding-bottom:40px}
   .page-title{font-size:21px}
   .page-head{gap:10px}
   .hub{grid-template-columns:1fr}
-  .sg-body{grid-template-columns:1fr;padding:10px 12px 14px}
   .detail-row{gap:10px}
   .detail-row .v{max-width:52vw}
-  /* topbar: tighten, hide brand text, keep icons tappable */
   .topbar{gap:8px;padding:10px 12px}
   .brand-sub{display:none}
   .brand-name{font-size:15px}
   .who-name{max-width:30vw;font-size:12px}
   .icon-btn{width:40px;height:40px}
-  /* filter bars stack: label on its own line */
-  .filter-bar{flex-direction:column;gap:6px;margin-bottom:14px}
-  .filter-bar-label{text-align:left;width:auto;padding-top:0}
+  /* tiles: 2-up grid on phones, still tappable */
+  .tiles{grid-template-columns:repeat(2,1fr);gap:7px}
+  .tile-n{font-size:22px}
+  /* controls stack */
+  .board-controls{flex-direction:column;align-items:stretch}
   .loc-select{max-width:none}
   .search{width:100%}
-  /* stats scroll horizontally instead of cramming */
-  .statline{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px;scrollbar-width:none}
-  .statline::-webkit-scrollbar{display:none}
-  .stat{min-width:104px;flex:0 0 auto}
-  /* store group header wraps cleanly */
-  .sg-head{flex-wrap:wrap;gap:8px;padding:12px 13px}
-  .sg-name{flex:1 1 100%;order:1}
-  .sg-chev{order:0}
-  .sg-num,.sg-count{order:2}
-  .sg-people{padding:0 13px 11px}
-  /* modal: full-width sheet from the bottom */
+  /* rows: stack the right side under the main content */
+  .row{flex-direction:column;align-items:stretch;gap:9px;padding:12px 13px}
+  .row-desc{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+  .row-right{width:100%}
+  .row-assign{width:100%}
+  .row-sel{flex:1;min-width:0}
+  .row-status{text-align:left;min-width:0}
+  /* modal full-width */
   .sheet{max-width:100%}
   .sheet-body{padding:16px}
   .sheet-head{padding:15px 16px}
   .sheet-foot{padding:12px 16px}
   .status-grid{grid-template-columns:1fr 1fr}
   .photo-grid img{width:72px;height:72px}
-  /* comments + activity tighter */
   .cmt-time{margin-left:0;flex-basis:100%}
-  /* View As rows + sim frame */
   .va-list{max-height:54vh}
-  /* fab smaller, out of thumb-zone conflict */
   .fab{right:14px;bottom:16px;padding:13px 16px}
   .poll-dot{left:10px;bottom:10px}
   .login-card{max-width:100%}
 }
 @media(max-width:380px){
-  .stat{min-width:92px}
-  .chip{padding:6px 11px;font-size:12px}
+  .tiles{grid-template-columns:repeat(2,1fr)}
+  .tile-s{display:none}
 }
 @media(max-width:600px){.input,textarea.input,select.input{font-size:16px}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
@@ -687,7 +674,7 @@ function renderManagerHub(){
   const open=mine.filter(t=>ACTIVE_STATUSES.includes(t.status)).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
   const coach=storeCoach(sid), dir=storeDirector(sid), tech=storeTech(sid);
   const cards=open.length
-    ? `<div class="sg-body" style="border:none;padding:0;margin-top:4px">${open.map(ticketCard).join("")}</div>`
+    ? `<div class="rows">${open.map(ticketRow).join("")}</div>`
     : `<div class="empty" style="padding:40px 20px"><div class="empty-mark">✅</div><h3>No open tickets</h3><p>All clear.</p></div>`;
   return `
     <div class="page-head">
@@ -712,88 +699,62 @@ function renderManagerHub(){
 /* ---- board: stores first, then their tickets ---- */
 function renderBoard(){
   const storeIds=myStoreIds();
-  // gather all tickets across my stores for stats + search
   let allTickets=[];
   storeIds.forEach(sid=>{allTickets=allTickets.concat(ticketsForStore(sid))});
+  const cnt=s=>allTickets.filter(t=>t.status===s).length;
   const activeN=allTickets.filter(t=>ACTIVE_STATUSES.includes(t.status)).length;
-  const waitN=allTickets.filter(t=>t.status==="waiting").length;
-  const finN=allTickets.filter(t=>t.status==="finished").length;
-  const doneN=allTickets.filter(t=>t.status==="closed").length;
 
-  // header copy
   let title,meta;
   if(SESSION.role==="tech"){title="My dispatched stores";meta=`${esc(SESSION.name)} · ${storeIds.length} stores · ${allTickets.length} tickets`}
   else if(SESSION.role==="admin"){title="All stores";meta=`${storeIds.length} locations · overwatch`}
   else if(SESSION.role==="manager"){title=storeName(SESSION.storeId);meta=storeNum(SESSION.storeId)}
   else{title=ROLE_LABEL[SESSION.role]+" board";meta=`${storeIds.length} stores in your area`}
 
-  const backBtn="";
+  // big color-coded status tiles (active one filled)
+  const tiles=[
+    tile("active",activeN,"ACTIVE","All open work","var(--amber)"),
+    tile("unassigned",cnt("unassigned"),"UNASSIGNED","Needs an owner","var(--s-open)"),
+    tile("assigned",cnt("assigned"),"ASSIGNED","Vendor chosen","var(--s-assigned)"),
+    tile("dispatched",cnt("dispatched"),"DISPATCHED","Sent to tech","var(--violet)"),
+    tile("waiting",cnt("waiting"),"WAITING","On hold","var(--s-waiting)"),
+    tile("in_progress",cnt("in_progress"),"IN PROGRESS","Being worked","var(--s-progress)"),
+    tile("finished",cnt("finished"),"FINISHED","Work done","var(--s-finished)"),
+    SESSION.role==="admin"?tile("closed",cnt("closed"),"CLOSED","No follow-up","var(--s-closed)"):"",
+  ].join("");
 
   const head=`
     <div class="page-head">
       <div><div class="page-title">${esc(title)}</div><div class="page-meta">${esc(meta)}</div></div>
-      <div class="head-actions">
-        ${backBtn}
-        ${canCreate()?`<button class="btn btn-primary btn-sm" onclick="openCreate()">＋ New ticket</button>`:""}
-      </div>
+      <div class="head-actions">${canCreate()?`<button class="btn btn-primary btn-sm" onclick="openCreate()">＋ New ticket</button>`:""}</div>
     </div>
-    <div class="statline">
-      ${stat("active",activeN,"Active","var(--amber)")}
-      ${stat("unassigned",allTickets.filter(t=>t.status==="unassigned").length,"Unassigned","var(--s-open)")}
-      ${stat("in_progress",allTickets.filter(t=>t.status==="in_progress").length,"In Progress","var(--s-progress)")}
-      ${stat("finished",allTickets.filter(t=>t.status==="finished").length,"Finished","var(--s-finished)")}
-      ${SESSION.role==="admin"?stat("closed",doneN,"Closed","var(--s-closed)"):""}
-    </div>
-    ${storeIds.length>1?`
-    <div class="filter-bar">
-      <span class="filter-bar-label">Location</span>
-      <select class="input loc-select" onchange="curStore=this.value;render()">
-        <option value="all"${curStore==="all"?" selected":""}>All locations (${storeIds.length})</option>
+    <div class="tiles">${tiles}</div>
+    <div class="board-controls">
+      ${storeIds.length>1?`<select class="input loc-select" onchange="curStore=this.value;render()">
+        <option value="all"${curStore==="all"?" selected":""}>All stores (${storeIds.length})</option>
         ${storeIds.slice().sort((a,b)=>storeName(a).localeCompare(storeName(b))).map(id=>`<option value="${id}"${curStore===id?" selected":""}>${esc(storeName(id))} — ${esc(storeNum(id))}</option>`).join("")}
-      </select>
-    </div>`:""}
-    <div class="filter-bar">
-      <span class="filter-bar-label">Status</span>
-      <div class="filters">
-        ${chip("active","Active")}
-        ${chip("unassigned","Unassigned")}
-        ${chip("assigned","Vendor")}
-        ${chip("dispatched","Dispatched")}
-        ${chip("waiting","Waiting")}
-        ${chip("in_progress","In Progress")}
-        ${chip("finished","Finished")}
-        ${SESSION.role==="admin"?chip("closed","Closed"):""}
-        ${chip("all","All active")}
-      </div>
-    </div>
-    <div class="filter-bar">
-      <span class="filter-bar-label">Search</span>
-      <input class="input search" placeholder="Search store, issue, ticket #, category…" value="${escA(curSearch)}" oninput="curSearch=this.value;render()">
+      </select>`:""}
+      <input class="input search" placeholder="Search store, issue, ticket #…" value="${escA(curSearch)}" oninput="curSearch=this.value;render()">
     </div>`;
 
-  if(!storeIds.length){
-    return head+`<div class="empty"><div class="empty-mark">🏪</div><h3>No stores assigned to you</h3><p>Managed in the master.</p></div>`;
+  if(!storeIds.length) return head+`<div class="empty"><div class="empty-mark">🏪</div><h3>No stores assigned to you</h3><p>Managed in the master.</p></div>`;
+
+  // flat, sorted list of rows (location-filtered)
+  let rows=allTickets.slice();
+  if(curStore!=="all") rows=rows.filter(t=>t.storeId===curStore);
+  rows=applyFilterSearch(rows);
+  const label=({active:"Active",all:"All",unassigned:"Unassigned",assigned:"Assigned",dispatched:"Dispatched",waiting:"Waiting",in_progress:"In Progress",finished:"Finished",closed:"Closed"})[curFilter]||"";
+  const listHead=`<div class="list-head">${esc(label)} tickets <span class="lh-n">(${rows.length})</span></div>`;
+  const body = rows.length
+    ? `<div class="rows">${rows.map(ticketRow).join("")}</div>`
+    : `<div class="empty"><div class="empty-mark">🗂️</div><h3>Nothing here</h3><p>${curSearch?"No tickets match your search.":"No tickets in this view."}</p></div>`;
+
+  return head+listHead+body+(canCreate()?`<button class="fab" onclick="openCreate()">＋ New</button>`:"");
+
+  function tile(key,n,label,sub,c){
+    const on=curFilter===key;
+    return `<button class="tile ${on?"on":""}" style="--tc:${c}" onclick="curFilter='${key}';render()">
+      <div class="tile-l">${label}</div><div class="tile-n">${n}</div><div class="tile-s">${sub}</div></button>`;
   }
-
-  // sort stores by name; apply location filter; hide empty groups when status-filtering/searching
-  let sortedStores=storeIds.slice().sort((a,b)=>storeName(a).localeCompare(storeName(b)));
-  if(curStore!=="all") sortedStores=sortedStores.filter(id=>id===curStore);
-  let groupsHtml="", anyShown=false;
-  sortedStores.forEach(sid=>{
-    let list=ticketsForStore(sid);
-    list=applyFilterSearch(list);
-    if(!list.length && (curFilter!=="all"||curSearch) && curStore==="all") return; // hide empty groups when filtering across all
-    anyShown=true;
-    groupsHtml+=storeGroup(sid,list);
-  });
-  if(!anyShown){
-    groupsHtml=`<div class="empty"><div class="empty-mark">🗂️</div><h3>Nothing matches</h3><p>${curSearch?"No tickets match your search.":"No tickets in this filter."}</p></div>`;
-  }
-
-  return head+groupsHtml+(canCreate()?`<button class="fab" onclick="openCreate()">＋ New</button>`:"");
-
-  function chip(key,label){return `<button class="chip ${curFilter===key?"on":""}" onclick="curFilter='${key}';render()">${label}</button>`}
-  function stat(key,n,l,c){return `<button class="stat statbtn ${curFilter===key?"on":""}" onclick="curFilter='${key}';render()"><span class="bar" style="background:${c}"></span><div class="stat-n">${n}</div><div class="stat-l">${l}</div></button>`}
 }
 
 function applyFilterSearch(list){
@@ -802,55 +763,60 @@ function applyFilterSearch(list){
   else if(curFilter==="all")out=out.filter(t=>SESSION.role==="admin"?true:t.status!=="closed");
   else out=out.filter(t=>t.status===curFilter);
   if(curSearch){const q=curSearch.toLowerCase();
-    out=out.filter(t=>(t.description||"").toLowerCase().includes(q)||(CATEGORIES[t.category]||"").toLowerCase().includes(q)||(t.shortId||"").toLowerCase().includes(q))}
+    out=out.filter(t=>(t.description||"").toLowerCase().includes(q)||(CATEGORIES[t.category]||"").toLowerCase().includes(q)||(t.shortId||"").toLowerCase().includes(q)||storeName(t.storeId).toLowerCase().includes(q)||storeNum(t.storeId).toLowerCase().includes(q))}
   out.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
   return out;
 }
 
-function storeGroup(sid,list){
-  const open=openGroups[sid]!==false;
-  const coach=storeCoach(sid), dir=storeDirector(sid), tech=storeTech(sid);
-  const openN=ticketsForStore(sid).filter(t=>ACTIVE_STATUSES.includes(t.status)).length;
-  const cards=list.length?list.map(ticketCard).join(""):`<div style="grid-column:1/-1;color:var(--ink-dim);font-size:13px;padding:6px 2px">No tickets for this store.</div>`;
+// compact horizontal ticket row
+function ticketRow(t){
+  const st=STATUSES[t.status]||STATUSES.unassigned;
+  const cat=CATEGORIES[t.category]||"Other";
+  const pri=t.priority||"normal";
+  const priClass={urgent:"u",high:"h",normal:"n",low:"l"}[pri]||"n";
+  const photoN=(t.photos||[]).length;
+  // right side: inline assign for admin on unassigned, else assignee/status
+  let right;
+  if(SESSION.role==="admin" && (t.status==="unassigned")){
+    right=`<div class="row-assign" onclick="event.stopPropagation()">
+      <select class="input row-sel" id="rsel_${t._id}">
+        <option value="">Assign to…</option>
+        <optgroup label="Repair Technicians">${Object.entries(MASTER.repairTechnicians||{}).map(([id,v])=>`<option value="tech:${id}">${esc(v.name)}</option>`).join("")}</optgroup>
+        <optgroup label="Approved Vendors">${Object.entries(VENDORS).map(([id,v])=>`<option value="vendor:${id}">${esc(v.name)}</option>`).join("")||'<option disabled>None</option>'}</optgroup>
+      </select>
+      <button class="btn btn-primary btn-sm" onclick="rowAssign('${t._id}')">Assign</button>
+    </div>`;
+  }else{
+    let who="";
+    if(t.assignedTechId)who=techName(t.assignedTechId)||"Tech";
+    else if(t.assignedVendorId)who=VENDORS[t.assignedVendorId]?.name||"Vendor";
+    else if(storeTech(t.storeId))who=storeTech(t.storeId).name;
+    right=`<div class="row-status" style="--tc:${st.color}">
+      <div class="rs-label">${st.label}</div>${who?`<div class="rs-who">${esc(who)}</div>`:""}</div>`;
+  }
   return `
-    <div class="store-group">
-      <div class="sg-head ${open?"open":""}" onclick="toggleGroup('${sid}')">
-        <span class="sg-chev">▶</span>
-        <span class="sg-name">${esc(storeName(sid))}</span>
-        <span class="sg-num mono">${esc(storeNum(sid))}</span>
-        <span class="sg-count mono">${openN} open</span>
+    <div class="row" onclick="openTicket('${t._id}')">
+      <div class="row-main">
+        <div class="row-top"><span class="row-store">${esc(storeName(t.storeId))} ${esc(storeNum(t.storeId))}</span></div>
+        <div class="row-desc">${esc(t.description||"No description")}</div>
+        <div class="row-meta">
+          <span class="r-id mono">${esc(t.shortId||t._id.slice(0,6).toUpperCase())}</span>
+          <span class="r-pri ${priClass}">${PRIORITIES[pri]||"Normal"}</span>
+          <span class="r-sep">·</span><span>${cat}</span>
+          <span class="r-sep">·</span><span>${timeAgo(t.createdAt)}</span>
+          ${photoN?`<span class="r-sep">·</span><span>📷 ${photoN}</span>`:""}
+        </div>
       </div>
-      <div class="sg-people">
-        ${dir?`<span><b>Dir:</b> ${esc(dir.name)}</span>`:""}
-        ${coach?`<span><b>Coach:</b> ${esc(coach.name)}</span>`:""}
-        ${tech?`<span><b>Tech:</b> ${esc(tech.name)}</span>`:`<span style="color:var(--ink-dim)">No tech assigned</span>`}
-      </div>
-      ${open?`<div class="sg-body">${cards}</div>
-        ${canCreate()&&SESSION.role!=="admin"?`<div class="sg-actions"><button class="btn btn-ghost btn-sm" onclick="openCreate('${sid}')">＋ New ticket for this store</button></div>`:""}`:""}
+      <div class="row-right">${right}</div>
     </div>`;
 }
-function toggleGroup(sid){openGroups[sid]=openGroups[sid]===false?true:false;render()}
-
-function ticketCard(t){
-  const st=STATUSES[t.status]||STATUSES.open, cat=CATEGORIES[t.category]||"Other", pri=t.priority||"normal";
-  const priTag=(pri==="high"||pri==="urgent")?`<span class="tag pri-${pri}">${PRIORITIES[pri]}</span>`:"";
-  const photos=(t.photos||[]).slice(0,4).map(u=>`<img src="${escA(u)}" loading="lazy" alt="">`).join("");
-  return `
-    <div class="tk" onclick="openTicket('${t._id}')">
-      <div class="tk-top">
-        <span class="tk-id mono">#${esc(t.shortId||t._id.slice(0,6).toUpperCase())}</span>
-        <span class="tk-top-spacer"></span>
-        <span class="sbadge" style="color:${st.color};background:${st.color}1a"><span class="dot"></span>${st.label}</span>
-      </div>
-      <div class="tk-body">
-        <div class="tk-desc">${esc(t.description||"No description")}</div>
-        <div class="tk-foot">
-          <span class="tag cat">${cat}</span>${priTag}
-          <span class="tag" style="margin-left:auto">${timeAgo(t.createdAt)}</span>
-        </div>
-        ${photos?`<div class="tk-photos">${photos}</div>`:""}
-      </div>
-    </div>`;
+// inline assign from a row (admin)
+async function rowAssign(id){
+  const sel=$("rsel_"+id); if(!sel||!sel.value){toast("Pick someone first","err");return}
+  const val=sel.value; let patch,note;
+  if(val.startsWith("tech:")){const tid=val.slice(5);patch={assignedTechId:tid,assignedVendorId:null,status:"dispatched"};note="🔧 "+(techName(tid)||"tech")}
+  else{const vid=val.slice(7);patch={assignedVendorId:vid,assignedTechId:null,status:"assigned"};note="🏢 "+(VENDORS[vid]?.name||"vendor")}
+  if(await patchTicket(id,patch,{action:"assign",note,toStatus:patch.status}))toast("Assigned · "+note);
 }
 
 /* ============================================================ MODAL */
