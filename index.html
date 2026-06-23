@@ -115,6 +115,8 @@ body.no-reftags .reftag{display:none}
 .tile.on .tile-n{color:#fff}
 .tile-s{font-size:9.5px;color:var(--ink-dim);margin-top:2px;line-height:1.25}
 .tile.on .tile-s{color:rgba(255,255,255,.85)}
+.tile.big{transform:scale(1.06);box-shadow:0 6px 20px rgba(40,55,80,.2);z-index:2}
+.tile.big .tile-n{font-size:30px}
 .board-controls{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;align-items:center}
 .loc-select{max-width:300px;flex:0 1 auto}
 .search{flex:1;min-width:160px}
@@ -125,6 +127,8 @@ body.no-reftags .reftag{display:none}
 .rows{display:flex;flex-direction:column;gap:8px}
 .row{display:flex;align-items:center;gap:14px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 15px;cursor:pointer;transition:.12s}
 .row:hover{border-color:var(--ink-dim);box-shadow:var(--shadow)}
+.row.tinted{background:color-mix(in srgb,var(--rt) 7%,var(--panel));border-left:3px solid var(--rt)}
+.row.tinted:hover{background:color-mix(in srgb,var(--rt) 12%,var(--panel))}
 .row-main{flex:1;min-width:0}
 .row-top{display:flex;align-items:center;gap:8px;margin-bottom:2px}
 .row-store{font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -710,7 +714,7 @@ function renderManagerHub(){
     <div class="page-head">
       <div>
         <div class="page-title">${esc(storeName(sid))}</div>
-        <div class="page-meta">${esc(storeNum(sid))} · ${esc(SESSION.name)}</div>
+        <div class="page-meta">${esc(SESSION.name)}</div>
       </div>
     </div>
     <div class="sg-people" style="padding:0 0 16px">
@@ -737,7 +741,7 @@ function renderBoard(){
   let title,meta;
   if(SESSION.role==="tech"){title="My dispatched stores";meta=`${esc(SESSION.name)} · ${storeIds.length} stores · ${allTickets.length} tickets`}
   else if(SESSION.role==="admin"){title="All stores";meta=`${storeIds.length} locations · overwatch`}
-  else if(SESSION.role==="manager"){title=storeName(SESSION.storeId);meta=storeNum(SESSION.storeId)}
+  else if(SESSION.role==="manager"){title=storeName(SESSION.storeId);meta="Your store"}
   else{title=ROLE_LABEL[SESSION.role]+" board";meta=`${storeIds.length} stores in your area`}
 
   // Open (yellow) = all not-closed; Closed (grey) always visible.
@@ -750,6 +754,11 @@ function renderBoard(){
     tile("in_progress",cnt("in_progress"),"IN PROGRESS","Being worked","var(--s-progress)"),
     tile("finished",cnt("finished"),"FINISHED","Work done","var(--s-finished)"),
   ].join("");
+  // If a middle status is the active filter, keep the strip pinned open so the
+  // user can hop between sub-pages without re-expanding (sketch: ( . . . ! . )).
+  const MID=["unassigned","assigned","dispatched","waiting","in_progress"].concat(["finished"]);
+  const midActive=MID.includes(curFilter);
+  if(midActive){tilesExpanded=true;_tilePinned=true;}
   const tilesBlock=`
     <div class="tiles-wrap ${tilesExpanded?"expanded":""}" id="tilesWrap"
          onmouseenter="expandTiles(true)" onmouseleave="expandTiles(false)">
@@ -770,7 +779,7 @@ function renderBoard(){
     <div class="board-controls">
       ${storeIds.length>1?`<select class="input loc-select" onchange="curStore=this.value;render()">
         <option value="all"${curStore==="all"?" selected":""}>All stores (${storeIds.length})</option>
-        ${storeIds.slice().sort((a,b)=>storeName(a).localeCompare(storeName(b))).map(id=>`<option value="${id}"${curStore===id?" selected":""}>${esc(storeName(id))} — ${esc(storeNum(id))}</option>`).join("")}
+        ${storeIds.slice().sort((a,b)=>storeName(a).localeCompare(storeName(b))).map(id=>`<option value="${id}"${curStore===id?" selected":""}>${esc(storeName(id))}</option>`).join("")}
       </select>`:""}
       ${(curFilter==="dispatched"||curFilter==="assigned")?assigneeFilterSelect(allTickets):""}
       <input class="input search" placeholder="Search store, issue, ticket #…" value="${escA(curSearch)}" oninput="curSearch=this.value;render()">
@@ -792,9 +801,16 @@ function renderBoard(){
 
   function tile(key,n,label,sub,c){
     const on=curFilter===key;
-    return `<button class="tile ${on?"on":""}" style="--tc:${c}" onclick="curFilter='${key}';curAssignee='all';render()">
+    const big=on&&["unassigned","assigned","dispatched","waiting","in_progress","finished"].includes(key)?" big":"";
+    return `<button class="tile ${on?"on":""}${big}" style="--tc:${c}" onclick="pickStatus('${key}')">
       <div class="tile-l">${label}</div><div class="tile-n">${n}</div><div class="tile-s">${sub}</div></button>`;
   }
+}
+// choosing OPEN or CLOSED unpins the strip; a middle status keeps it open
+function pickStatus(key){
+  curFilter=key; curAssignee="all";
+  if(key==="active"||key==="closed"){_tilePinned=false;tilesExpanded=false;}
+  render();
 }
 // expand the middle status tiles. Hover toggles on desktop; tap (the ⟨ ⟩ button)
 // pins it open/closed for touch devices. We avoid re-render to keep the CSS animation.
@@ -902,11 +918,14 @@ function ticketRow(t){
         <div class="rb-btns">${contactBtns(t,who,"Contact "+who.name.split(" ")[0])}</div></div>`;
     }
   }
+  // On the OPEN page, tint each row subtly with its status color; sub-pages are mono-status already.
+  const tint = (curFilter==="active") ? ` style="--rt:${st.color}"` : "";
+  const tintClass = (curFilter==="active") ? " tinted" : "";
   return `
     <div class="row-wrap">
-    <div class="row" onclick="openTicket('${t._id}')">
+    <div class="row${tintClass}"${tint} onclick="openTicket('${t._id}')">
       <div class="row-main">
-        <div class="row-top"><span class="row-store">${esc(storeName(t.storeId))} ${esc(storeNum(t.storeId))}</span></div>
+        <div class="row-top"><span class="row-store">${esc(storeName(t.storeId))}</span></div>
         <div class="row-desc">${esc(t.description||"No description")}</div>
         <div class="row-meta">
           <span class="r-id mono">${esc(t.shortId||t._id.slice(0,6).toUpperCase())}</span>
@@ -959,7 +978,8 @@ function draftContact(id,channel){
       ${hasEmail?`<button class="btn btn-ghost btn-block" onclick="draftContact('${id}','email')">@ Email ${esc(who.email)}</button>`:""}
       ${(!hasSms&&!hasEmail)?`<div class="empty" style="padding:24px"><p>No phone or email on file for ${esc(who.name)}. Add it in their tech record.</p></div>`:""}
     </div>` : "";
-  const draftMsg = `Hi ${who.name.split(" ")[0]}, regarding ticket ${t.shortId} at ${storeName(t.storeId)} (${storeNum(t.storeId)}): ${t.description||""}`.slice(0,300);
+  const addr=store(t.storeId).address||"";
+  const draftMsg = `Hi ${who.name}, regarding ticket ${t.shortId} at ${storeName(t.storeId)}${addr?(" — "+addr):""}: ${t.description||""}`.slice(0,320);
   const draft = channel ? `
     <div class="field"><label class="label">To</label>
       <input class="input" value="${escA(channel==="sms"?who.phone:who.email)}" readonly></div>
@@ -997,7 +1017,7 @@ function openCreate(preStore){
   draftPhotos=[];
   let ids = SESSION.role==="manager" ? [SESSION.storeId] : myStoreIds();
   ids.sort((a,b)=>storeName(a).localeCompare(storeName(b)));
-  const storeOpts=ids.map(id=>`<option value="${id}"${preStore===id?" selected":""}>${esc(storeName(id))} (${esc(storeNum(id))})</option>`).join("");
+  const storeOpts=ids.map(id=>`<option value="${id}"${preStore===id?" selected":""}>${esc(storeName(id))}</option>`).join("");
   const catOpts=Object.entries(CATEGORIES).map(([k,v])=>`<option value="${k}">${v}</option>`).join("");
   const priOpts=Object.entries(PRIORITIES).map(([k,v])=>`<option value="${k}"${k==="normal"?" selected":""}>${v}</option>`).join("");
   modal(`
@@ -1092,7 +1112,6 @@ function openTicket(id){
     </div>
     <div class="sheet-body">
       <div style="font-weight:700;font-size:17px">${esc(storeName(sid))}</div>
-      <div class="mono" style="color:var(--amber);font-size:12px;margin-bottom:14px">${esc(storeNum(sid))}</div>
       <div class="detail-desc">${esc(t.description||"No description")}</div>
       ${photos?`<div class="photo-grid">${photos}</div>`:""}
       <div class="detail-row"><span class="k">Category</span><span class="v">${CATEGORIES[t.category]||"Other"}</span></div>
