@@ -375,7 +375,7 @@ body.simulating .wrap{padding-bottom:40px}
     <button class="icon-btn" id="refreshBtn" title="Refresh now" onclick="manualRefresh()">⟳</button>
     <button class="icon-btn hidden" id="viewAsBtn" title="View as another person" onclick="openViewAs()">👁</button>
     <button class="icon-btn hidden" id="vendorTopBtn" title="Third-party techs" onclick="openVendors()">🏢</button>
-    <button class="icon-btn" id="tagToggle" title="Toggle reference tags" onclick="toggleTags()">#</button>
+    <button class="icon-btn hidden" id="settingsBtn" title="Settings" onclick="openSettings()">⚙</button>
     <button class="icon-btn" title="Sign out" onclick="logout()">⏻</button>
   </div>
   <div class="wrap" id="mainView"></div>
@@ -425,6 +425,7 @@ const ROLE_PREFIX = {admin:"o",director:"d",coach:"a",tech:"r",manager:"m"};
 
 /* ============================================================ STATE */
 let MASTER=null, SESSION=null;
+let REPLY_NUMBERS={}; // email(lowercased) -> reply phone number, stored in master
 let TICKETS={}, VENDORS={}, RESTAURANTS={};
 let curFilter="active", curSearch="", curStore="all", tilesExpanded=false, curAssignee="all";
 let openGroups={};          // storeId -> bool (expanded)
@@ -446,7 +447,11 @@ async function refresh(){
   MASTER=await apiGet();
   RESTAURANTS=MASTER.restaurants||{};
   TICKETS=MASTER[TICKETS_NODE]||{};
-  VENDORS=MASTER[VENDORS_NODE]||{};
+  const allV=MASTER[VENDORS_NODE]||{};
+  // a reserved record under the (whitelisted) vendors node holds app config
+  // (reply phone numbers per Overwatch email), so we avoid a new API path.
+  REPLY_NUMBERS=(allV.__config__&&allV.__config__.replyNumbers)||{};
+  VENDORS={}; Object.keys(allV).forEach(k=>{if(k!=="__config__")VENDORS[k]=allV[k]});
 }
 
 /* ============================================================ IMGBB */
@@ -658,6 +663,7 @@ function enterAppChrome(){
   // View As is available only to a real (non-simulated) admin
   const realAdmin = (REAL_SESSION?REAL_SESSION:SESSION).role==="admin" && !SESSION._sim;
   $("viewAsBtn").classList.toggle("hidden",!realAdmin);
+  $("settingsBtn").classList.toggle("hidden",!realAdmin);
   document.body.classList.toggle("no-reftags",!SHOW_REF_TAGS);
 }
 function enterApp(){
@@ -979,13 +985,22 @@ function draftContact(id,channel){
       ${(!hasSms&&!hasEmail)?`<div class="empty" style="padding:24px"><p>No phone or email on file for ${esc(who.name)}. Add it in their tech record.</p></div>`:""}
     </div>` : "";
   const addr=store(t.storeId).address||"";
-  const draftMsg = `Hi ${who.name}, regarding ticket ${t.shortId} at ${storeName(t.storeId)}${addr?(" — "+addr):""}: ${t.description||""}`.slice(0,320);
+  const photos=(t.photos||[]);
+  const photoBlock=photos.length?("\n\nPhotos:\n"+photos.join("\n")):"";
+  const replyEmail=SESSION.email; // the dispatching Overwatch
+  const replyPhone=REPLY_NUMBERS[(SESSION.email||"").toLowerCase()]||"";
+  const draftMsg = `Hi ${who.name}, regarding ticket ${t.shortId} at ${storeName(t.storeId)}${addr?(" — "+addr):""}: ${t.description||""}${photoBlock}`;
+  const replyLine = channel==="email"
+    ? `Reply to: ${replyEmail}`
+    : (replyPhone?`Reply to: ${replyPhone}`:`Reply number not set — add it in ⚙ Settings`);
   const draft = channel ? `
     <div class="field"><label class="label">To</label>
       <input class="input" value="${escA(channel==="sms"?who.phone:who.email)}" readonly></div>
     <div class="field" style="margin-top:12px"><label class="label">${channel==="sms"?"Text message":"Email body"}</label>
-      <textarea class="input" id="draftBody" style="min-height:120px">${esc(draftMsg)}</textarea></div>
-    <div class="contact-note">Draft only — sending via ${channel==="sms"?"SMS (Twilio)":"email (SendGrid)"} will be wired up later.</div>` : "";
+      <textarea class="input" id="draftBody" style="min-height:140px">${esc(draftMsg)}</textarea></div>
+    <div class="field" style="margin-top:12px"><label class="label">Replies go to</label>
+      <input class="input" value="${escA(channel==="email"?replyEmail:(replyPhone||"(not set)"))}" readonly></div>
+    <div class="contact-note">${esc(replyLine)} · Draft only — sending via ${channel==="sms"?"SMS (Twilio)":"email (SendGrid)"} will be wired up later.</div>` : "";
   modal(`
     <div class="sheet-head"><h2>Contact ${esc(who.name)}</h2><button class="x-btn" onclick="closeModal()">✕</button></div>
     <div class="sheet-body">${chooser}${draft}</div>
@@ -1307,6 +1322,41 @@ async function saveEdit(id){
 }
 
 /* ============================================================ VENDORS */
+function openSettings(){
+  // current known Overwatch emails: the fixed admins + anyone in the admins node
+  const adminEmails=[...new Set([...ADMIN_EMAILS,...Object.values(MASTER.admins||{}).map(a=>(a.email||"").toLowerCase()).filter(Boolean)])];
+  const rows=adminEmails.map(em=>`
+    <div class="field" style="margin-bottom:12px">
+      <label class="label">${esc(em)}</label>
+      <input class="input reply-in" data-email="${escA(em)}" value="${escA(REPLY_NUMBERS[em]||"")}" placeholder="Reply number, e.g. +18170001234" inputmode="tel">
+    </div>`).join("");
+  modal(`
+    <div class="sheet-head"><h2>Settings</h2><button class="x-btn" onclick="closeModal()">✕</button></div>
+    <div class="sheet-body">
+      <div class="section-label">Reply numbers<span class="ln"></span></div>
+      <p style="color:var(--ink-dim);font-size:13px;margin-top:0">When you text or email a tech, replies route back to whichever Overwatch sent it. Set each person's reply number here.</p>
+      ${rows}
+      <div class="contact-note">Used as the reply-to / callback when SMS (Twilio) and email (SendGrid) are wired up.</div>
+    </div>
+    <div class="sheet-foot">
+      <button class="btn btn-ghost" style="flex:1" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" style="flex:1" id="setSave" onclick="saveSettings()">Save</button>
+    </div>`);
+}
+async function saveSettings(){
+  const map={...REPLY_NUMBERS};
+  document.querySelectorAll(".reply-in").forEach(i=>{
+    const em=i.getAttribute("data-email").toLowerCase(), v=i.value.trim();
+    if(v)map[em]=v; else delete map[em];
+  });
+  const btn=$("setSave");btn.disabled=true;btn.innerHTML='<span class="inline-spin"></span>';
+  try{
+    // merge into the reserved config record without clobbering other config keys
+    const existing=(MASTER[VENDORS_NODE]&&MASTER[VENDORS_NODE].__config__)||{};
+    await apiWrite(`${VENDORS_NODE}/__config__`,{...existing,replyNumbers:map});
+    await refresh();toast("Settings saved");closeModal();
+  }catch(e){toast(e.message||"Could not save","err");btn.disabled=false;btn.textContent="Save"}
+}
 function openVendors(){
   const rows=Object.entries(VENDORS).map(([id,v])=>`
     <div class="vrow"><div style="flex:1;min-width:0">
