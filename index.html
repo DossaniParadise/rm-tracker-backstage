@@ -138,6 +138,13 @@ body.no-reftags .reftag{display:none}
 .row.tinted:hover{background:color-mix(in srgb,var(--rt) 12%,var(--panel))}
 .row.row-prog{background:color-mix(in srgb,var(--blue) 10%,var(--panel));border-color:var(--blue);border-left:4px solid var(--blue)}
 .row.row-prog:hover{background:color-mix(in srgb,var(--blue) 16%,var(--panel))}
+.row.row-emerg{background:color-mix(in srgb,var(--red) 8%,var(--panel));border-color:var(--red);border-left:4px solid var(--red)}
+.row.row-emerg:hover{background:color-mix(in srgb,var(--red) 14%,var(--panel))}
+.r-dist{font-weight:600;color:var(--ink-mid)}
+.loc-note{display:block;width:100%;text-align:left;font-size:12.5px;border-radius:9px;padding:9px 12px;margin:-4px 0 14px;border:1px solid var(--line)}
+.loc-note.ok{background:color-mix(in srgb,var(--green) 8%,var(--panel));color:var(--green);border-color:color-mix(in srgb,var(--green) 30%,var(--line))}
+.loc-note.ask{background:var(--panel-2);color:var(--amber-deep);border-color:color-mix(in srgb,var(--amber) 40%,var(--line));font-weight:600;cursor:pointer}
+.loc-note.ask:hover{border-color:var(--amber);background:#fff7e6}
 .row-main{flex:1;min-width:0}
 .row-top{display:flex;align-items:center;gap:8px;margin-bottom:2px}
 .row-store{font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -328,6 +335,13 @@ body.simulating .wrap{padding-bottom:40px}
   .search{width:100%}
   /* rows: stack the right side under the main content */
   .row{flex-direction:column;align-items:stretch;gap:9px;padding:12px 13px}
+  /* clearer separation between jobs on a phone: more air + a heavier card edge */
+  .rows{gap:16px}
+  .row{border-width:1.5px;border-radius:13px;box-shadow:0 2px 8px rgba(40,55,80,.07)}
+  .row-wrap+.row-wrap{position:relative}
+  .row-wrap+.row-wrap::before{content:"";position:absolute;top:-9px;left:14%;right:14%;height:2px;border-radius:2px;
+    background:linear-gradient(90deg,transparent,var(--line),transparent)}
+  .row-store{font-size:16px;font-weight:800}
   .row-desc{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
   .row-right{width:100%}
   .row-assign{width:100%}
@@ -557,6 +571,35 @@ function storeGeoUrl(rid){
   const q=(s.address||storeName(rid)||"").trim();
   return q?`https://maps.google.com/?q=${encodeURIComponent(q)}`:"";
 }
+/* ---- tech location (for nearest-first sorting) ----
+   We ask once on load. If granted, we keep the tech's coords and re-render so
+   the job list sorts by distance. Everything still works without it — distance
+   just drops out of the sort. */
+let TECH_LOC=null;          // {lat,lng} once known
+let _locAsked=false;
+function requestTechLocation(force){
+  if(!("geolocation" in navigator)) return;
+  if(_locAsked && !force) return;
+  _locAsked=true;
+  navigator.geolocation.getCurrentPosition(
+    pos=>{TECH_LOC={lat:pos.coords.latitude,lng:pos.coords.longitude};if(SESSION&&SESSION.role==="tech")render();},
+    err=>{/* denied or unavailable — silently fall back to recency sort */},
+    {enableHighAccuracy:true,timeout:10000,maximumAge:300000}
+  );
+}
+function storeCoords(rid){
+  const s=store(rid);const lat=parseFloat(s.latitude),lng=parseFloat(s.longitude);
+  return (isFinite(lat)&&isFinite(lng))?{lat,lng}:null;
+}
+// great-circle distance in miles; null if either point is missing
+function distanceMiles(a,b){
+  if(!a||!b)return null;
+  const R=3958.8, toR=x=>x*Math.PI/180;
+  const dLat=toR(b.lat-a.lat), dLng=toR(b.lng-a.lng);
+  const s=Math.sin(dLat/2)**2+Math.cos(toR(a.lat))*Math.cos(toR(b.lat))*Math.sin(dLng/2)**2;
+  return R*2*Math.atan2(Math.sqrt(s),Math.sqrt(1-s));
+}
+function ticketDistance(t){return TECH_LOC?distanceMiles(TECH_LOC,storeCoords(t.storeId)):null}
 
 /* ============================================================ LOGIN */
 async function doLogin(){
@@ -732,6 +775,7 @@ function enterAppChrome(){
 function enterApp(){
   enterAppChrome();
   if(SESSION.role==="tech" && (curFilter==="active"||curFilter==="all")) curFilter="dispatched";
+  if(SESSION.role==="tech") requestTechLocation();
   managerScreen="hub";
   myStoreIds().forEach(id=>openGroups[id]=true);
   render();
@@ -835,17 +879,27 @@ function renderBoard(){
           ${storeIds.slice().sort((a,b)=>storeName(a).localeCompare(storeName(b))).map(id=>`<option value="${id}"${curStore===id?" selected":""}>${esc(storeName(id))}</option>`).join("")}
         </select>`:""}
         <input class="input search" placeholder="Search store, issue, ticket #…" value="${escA(curSearch)}" oninput="curSearch=this.value;render()">
-      </div>`;
+      </div>
+      ${curFilter==="dispatched"?(TECH_LOC
+        ? `<div class="loc-note ok">📍 Sorted nearest first from your location</div>`
+        : `<button class="loc-note ask" onclick="requestTechLocation(true)">📍 Turn on location to sort nearest jobs first</button>`):""}`;
     if(!storeIds.length) return techHead+`<div class="empty"><div class="empty-mark">🏪</div><h3>No stores dispatched to you</h3><p>Managed in the master.</p></div>`;
     let trows=allTickets.slice();
     if(curStore!=="all") trows=trows.filter(t=>t.storeId===curStore);
     trows=applyFilterSearch(trows);
-    // In-progress jobs always ride at the top (highlighted blue); then the rest
-    // by most-recently-touched. Keeps the active job in the tech's face.
+    // Tech list priority: (1) in-progress always on top, (2) emergencies next,
+    // (3) then nearest-to-farthest from the tech's current location. If location
+    // isn't granted yet, distance drops out and we fall back to recency.
     if(curFilter==="dispatched"){
       trows.sort((a,b)=>{
         const ai=a.status==="in_progress"?0:1, bi=b.status==="in_progress"?0:1;
         if(ai!==bi)return ai-bi;
+        const ae=a.priority==="emergency"?0:1, be=b.priority==="emergency"?0:1;
+        if(ae!==be)return ae-be;
+        const ad=ticketDistance(a), bd=ticketDistance(b);
+        if(ad!=null && bd!=null && ad!==bd) return ad-bd;
+        if(ad!=null && bd==null) return -1;
+        if(ad==null && bd!=null) return 1;
         return (b.updatedAt||b.createdAt||0)-(a.updatedAt||a.createdAt||0);
       });
     }
@@ -1098,9 +1152,15 @@ function ticketRow(t){
   const selClass = (showChk && selectedIds[t._id]) ? " row-selected" : "";
   // Tech: an in-progress job is highlighted blue and sits at the top of the list.
   const progClass = (SESSION.role==="tech" && t.status==="in_progress") ? " row-prog" : "";
+  // Tech: emergencies get a red treatment (unless the row is already the blue
+  // in-progress one, which wins since it's the active job).
+  const emergClass = (SESSION.role==="tech" && pri==="emergency" && t.status!=="in_progress") ? " row-emerg" : "";
+  // Distance chip (tech, when location is known and the store has coords)
+  const dist = (SESSION.role==="tech") ? ticketDistance(t) : null;
+  const distChip = (dist!=null) ? `<span class="r-sep">·</span><span class="r-dist">📍 ${dist<10?dist.toFixed(1):Math.round(dist)} mi</span>` : "";
   return `
     <div class="row-wrap">
-    <div class="row${tintClass}${selClass}${progClass}"${tint} onclick="${rowClick}">
+    <div class="row${tintClass}${selClass}${progClass}${emergClass}"${tint} onclick="${rowClick}">
       ${chk}
       <div class="row-main">
         <div class="row-top"><span class="row-store">${esc(storeName(t.storeId))}</span></div>
@@ -1109,6 +1169,7 @@ function ticketRow(t){
           <span class="r-id mono">${esc(t.shortId||t._id.slice(0,6).toUpperCase())}</span>
           <span class="r-pri ${priClass}">${PRIORITIES[pri]||"Normal"}</span>
           <span class="r-sep">·</span><span>${cat}</span>
+          ${distChip}
           <span class="r-sep">·</span><span>${timeAgo(t.createdAt)}</span>
           ${photoN?`<span class="r-sep">·</span><span>📷 ${photoN}</span>`:""}
         </div>
