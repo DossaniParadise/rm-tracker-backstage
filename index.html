@@ -447,11 +447,12 @@ async function refresh(){
   MASTER=await apiGet();
   RESTAURANTS=MASTER.restaurants||{};
   TICKETS=MASTER[TICKETS_NODE]||{};
-  const allV=MASTER[VENDORS_NODE]||{};
-  // a reserved record under the (whitelisted) vendors node holds app config
-  // (reply phone numbers per Overwatch email), so we avoid a new API path.
-  REPLY_NUMBERS=(allV.__config__&&allV.__config__.replyNumbers)||{};
-  VENDORS={}; Object.keys(allV).forEach(k=>{if(k!=="__config__")VENDORS[k]=allV[k]});
+  VENDORS=MASTER[VENDORS_NODE]||{};
+  // reply numbers are stored as contact info on each Overwatch admin record
+  REPLY_NUMBERS={};
+  Object.values(MASTER.admins||{}).forEach(a=>{
+    if(a.email&&a.replyNumber)REPLY_NUMBERS[a.email.toLowerCase()]=a.replyNumber;
+  });
 }
 
 /* ============================================================ IMGBB */
@@ -1323,7 +1324,6 @@ async function saveEdit(id){
 
 /* ============================================================ VENDORS */
 function openSettings(){
-  // current known Overwatch emails: the fixed admins + anyone in the admins node
   const adminEmails=[...new Set([...ADMIN_EMAILS,...Object.values(MASTER.admins||{}).map(a=>(a.email||"").toLowerCase()).filter(Boolean)])];
   const rows=adminEmails.map(em=>`
     <div class="field" style="margin-bottom:12px">
@@ -1333,8 +1333,8 @@ function openSettings(){
   modal(`
     <div class="sheet-head"><h2>Settings</h2><button class="x-btn" onclick="closeModal()">✕</button></div>
     <div class="sheet-body">
-      <div class="section-label">Reply numbers<span class="ln"></span></div>
-      <p style="color:var(--ink-dim);font-size:13px;margin-top:0">When you text or email a tech, replies route back to whichever Overwatch sent it. Set each person's reply number here.</p>
+      <div class="section-label">Overwatch reply numbers<span class="ln"></span></div>
+      <p style="color:var(--ink-dim);font-size:13px;margin-top:0">Saved as contact info on each Overwatch account. When you text or email a tech, replies route back to whoever sent it.</p>
       ${rows}
       <div class="contact-note">Used as the reply-to / callback when SMS (Twilio) and email (SendGrid) are wired up.</div>
     </div>
@@ -1343,17 +1343,31 @@ function openSettings(){
       <button class="btn btn-primary" style="flex:1" id="setSave" onclick="saveSettings()">Save</button>
     </div>`);
 }
+// find an admin record id by email, or null
+function adminIdByEmail(email){
+  const lc=(email||"").toLowerCase();
+  const admins=MASTER.admins||{};
+  return Object.keys(admins).find(id=>(admins[id].email||"").toLowerCase()===lc)||null;
+}
 async function saveSettings(){
-  const map={...REPLY_NUMBERS};
-  document.querySelectorAll(".reply-in").forEach(i=>{
-    const em=i.getAttribute("data-email").toLowerCase(), v=i.value.trim();
-    if(v)map[em]=v; else delete map[em];
-  });
+  const inputs=[...document.querySelectorAll(".reply-in")];
   const btn=$("setSave");btn.disabled=true;btn.innerHTML='<span class="inline-spin"></span>';
   try{
-    // merge into the reserved config record without clobbering other config keys
-    const existing=(MASTER[VENDORS_NODE]&&MASTER[VENDORS_NODE].__config__)||{};
-    await apiWrite(`${VENDORS_NODE}/__config__`,{...existing,replyNumbers:map});
+    // each reply number is written onto that person's admin record (admins/{id}).
+    // create a minimal record if one doesn't exist yet for a fixed admin email.
+    for(const i of inputs){
+      const email=i.getAttribute("data-email").toLowerCase();
+      const num=i.value.trim();
+      let id=adminIdByEmail(email);
+      if(id){
+        const rec={...MASTER.admins[id],replyNumber:num||null};
+        await apiWrite(`admins/${id}`,rec);
+      }else{
+        // no record yet → create one keyed by a generated id
+        const newId="adm_"+uid();
+        await apiWrite(`admins/${newId}`,{id:newId,email,name:email.split("@")[0],tier:"overwatch",replyNumber:num||null});
+      }
+    }
     await refresh();toast("Settings saved");closeModal();
   }catch(e){toast(e.message||"Could not save","err");btn.disabled=false;btn.textContent="Save"}
 }
