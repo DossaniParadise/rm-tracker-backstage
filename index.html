@@ -136,6 +136,8 @@ body.no-reftags .reftag{display:none}
 .row:hover{border-color:var(--ink-dim);box-shadow:var(--shadow)}
 .row.tinted{background:color-mix(in srgb,var(--rt) 7%,var(--panel));border-left:3px solid var(--rt)}
 .row.tinted:hover{background:color-mix(in srgb,var(--rt) 12%,var(--panel))}
+.row.row-prog{background:color-mix(in srgb,var(--blue) 10%,var(--panel));border-color:var(--blue);border-left:4px solid var(--blue)}
+.row.row-prog:hover{background:color-mix(in srgb,var(--blue) 16%,var(--panel))}
 .row-main{flex:1;min-width:0}
 .row-top{display:flex;align-items:center;gap:8px;margin-bottom:2px}
 .row-store{font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -205,6 +207,11 @@ body.no-reftags .reftag{display:none}
 .detail-desc{background:var(--panel-2);border:1px solid var(--line-soft);border-radius:9px;padding:13px 15px;font-size:14px;color:var(--ink-mid);line-height:1.55;margin:4px 0 16px}
 .photo-grid{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 18px}
 .photo-grid img{width:84px;height:84px;border-radius:9px;object-fit:cover;border:1px solid var(--line);cursor:pointer}
+.detail-store{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.gps-btn{flex-shrink:0;text-decoration:none}
+.thumb-grid{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 16px}
+.thumb{width:72px;height:72px;border-radius:9px;overflow:hidden;border:1px solid var(--line);background:var(--panel-2);display:block;flex-shrink:0}
+.thumb img{width:100%;height:100%;object-fit:cover;display:block}
 .timeline{margin:6px 0 4px;padding-left:4px}
 .tl-item{display:flex;gap:11px;padding:8px 0;font-size:13px}
 .tl-dot{width:9px;height:9px;border-radius:50%;background:var(--amber);margin-top:5px;flex-shrink:0;box-shadow:0 0 0 3px rgba(255,176,0,.15)}
@@ -228,6 +235,14 @@ body.no-reftags .reftag{display:none}
 .status-opt.cur{border-color:var(--amber);background:rgba(255,176,0,.08)}
 .status-opt .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
 .upload-zone{border:1.5px dashed var(--line);border-radius:11px;padding:18px;text-align:center;color:var(--ink-dim);transition:.15s;cursor:pointer;background:var(--panel-2)}
+.other-job{background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:12px 14px;border-left:3px solid var(--s-progress)}
+.other-job .oj-store{font-weight:700;font-size:14px}
+.other-job .oj-desc{font-size:13px;color:var(--ink-mid);margin-top:2px}
+.other-job .oj-meta{font-size:11px;color:var(--s-progress);margin-top:6px}
+.wait-chips{display:flex;flex-wrap:wrap;gap:8px}
+.wait-chip{border:1px solid var(--line);background:var(--panel-2);color:var(--ink-mid);border-radius:999px;padding:9px 14px;font-size:13px;font-weight:600;transition:.13s;min-height:40px}
+.wait-chip:hover{border-color:var(--ink-dim)}
+.wait-chip.on{border-color:var(--amber);background:rgba(245,158,11,.12);color:var(--amber-deep)}
 .upload-zone:hover{border-color:var(--amber);color:var(--amber)}
 .upload-zone .uz-ic{font-size:24px;margin-bottom:6px}
 .upload-zone .uz-t{font-size:13px;font-weight:600}
@@ -531,6 +546,17 @@ function storeCoach(rid){const id=store(rid).assignedAreaCoachId;return (MASTER.
 function storeTech(rid){const id=store(rid).assignedRepairTechnicianId;return (MASTER.repairTechnicians||{})[id]||null}
 function techName(tid){return (MASTER.repairTechnicians||{})[tid]?.name||null}
 function storeManagerName(rid){return store(rid).storeManager||""}
+/* ---- GPS link for a store. Coordinates are most precise; if a store has none
+   (a handful don't), fall back to its street address, then its name. Returns a
+   universal maps URL that opens the native maps/GPS app on phones (Google Maps
+   on Android, Apple Maps on iOS) and a map in any browser. */
+function storeGeoUrl(rid){
+  const s=store(rid);
+  const lat=parseFloat(s.latitude), lng=parseFloat(s.longitude);
+  if(isFinite(lat)&&isFinite(lng)) return `https://maps.google.com/?q=${lat},${lng}`;
+  const q=(s.address||storeName(rid)||"").trim();
+  return q?`https://maps.google.com/?q=${encodeURIComponent(q)}`:"";
+}
 
 /* ============================================================ LOGIN */
 async function doLogin(){
@@ -814,6 +840,15 @@ function renderBoard(){
     let trows=allTickets.slice();
     if(curStore!=="all") trows=trows.filter(t=>t.storeId===curStore);
     trows=applyFilterSearch(trows);
+    // In-progress jobs always ride at the top (highlighted blue); then the rest
+    // by most-recently-touched. Keeps the active job in the tech's face.
+    if(curFilter==="dispatched"){
+      trows.sort((a,b)=>{
+        const ai=a.status==="in_progress"?0:1, bi=b.status==="in_progress"?0:1;
+        if(ai!==bi)return ai-bi;
+        return (b.updatedAt||b.createdAt||0)-(a.updatedAt||a.createdAt||0);
+      });
+    }
     const tlabel = curFilter==="finished" ? "Finished" : "Dispatched";
     const tlistHead=`<div class="list-head">${tlabel} tickets <span class="lh-n">(${trows.length})</span></div>`;
     const tbody = trows.length
@@ -1042,7 +1077,7 @@ function ticketRow(t){
     const b=(target,emoji,labelTxt)=>{
       const isCur=t.status===target;
       const cls=target==="finished"?"btn-primary":"btn-ghost";
-      const act=target==="finished"?`openFinish('${t._id}')`:`setStatus('${t._id}','${target}')`;
+      const act=target==="finished"?`openFinish('${t._id}')`:(target==="in_progress"?`techStart('${t._id}')`:`setStatus('${t._id}','${target}')`);
       return `<button class="btn ${cls} btn-sm${isCur?" tk-cur":""}" ${isCur?"disabled":""} onclick="event.stopPropagation();${act}">${emoji} ${labelTxt}${isCur?" ·":""}</button>`;
     };
     below=`<div class="row-bar" onclick="event.stopPropagation()">
@@ -1061,9 +1096,11 @@ function ticketRow(t){
   const tint = (curFilter==="active") ? ` style="--rt:${st.color}"` : "";
   const tintClass = (curFilter==="active") ? " tinted" : "";
   const selClass = (showChk && selectedIds[t._id]) ? " row-selected" : "";
+  // Tech: an in-progress job is highlighted blue and sits at the top of the list.
+  const progClass = (SESSION.role==="tech" && t.status==="in_progress") ? " row-prog" : "";
   return `
     <div class="row-wrap">
-    <div class="row${tintClass}${selClass}"${tint} onclick="${rowClick}">
+    <div class="row${tintClass}${selClass}${progClass}"${tint} onclick="${rowClick}">
       ${chk}
       <div class="row-main">
         <div class="row-top"><span class="row-store">${esc(storeName(t.storeId))}</span></div>
@@ -1214,6 +1251,16 @@ async function submitTicket(){
 
 /* ============================================================ DETAIL */
 let editPhotos=null;
+/* Lazy, memory-light photo thumbnails. Low-end phones choke on full-res images,
+   so we render small thumbs with native lazy-loading + async decoding (the
+   browser only fetches one when it scrolls into view) and open full-size in a
+   new tab on tap. */
+function photoThumbs(t){
+  const ph=(t.photos||[]);
+  if(!ph.length) return "";
+  const imgs=ph.map(u=>`<a class="thumb" href="${escA(u)}" target="_blank" rel="noopener"><img src="${escA(u)}" loading="lazy" decoding="async" alt="job photo"></a>`).join("");
+  return `<div class="thumb-grid">${imgs}</div>`;
+}
 function openTicket(id){
   const t={_id:id,...TICKETS[id]};
   const st=STATUSES[t.status]||STATUSES.open;
@@ -1224,7 +1271,6 @@ function openTicket(id){
   if(t.assignedTechId){const n=techName(t.assignedTechId);assignee=n?("🔧 "+n+" (in-house)"):"Tech (removed)"}
   else if(t.assignedVendorId){const v=VENDORS[t.assignedVendorId];assignee=v?("🏢 "+v.name+" (third-party)"):"Tech (removed)"}
   else if(tech)assignee="🔧 "+tech.name+" (store tech)";
-  const photos=(t.photos||[]).map(u=>`<img src="${escA(u)}" onclick="window.open('${escA(u)}','_blank')" alt="">`).join("");
   const activity=(t.activity||[]).slice().reverse().map(a=>`
     <div class="tl-item"><div class="tl-dot" style="background:${(STATUSES[a.toStatus]||{}).color||'var(--amber)'}"></div>
       <div class="tl-c"><div class="tl-act">${esc(actionText(a))}</div>
@@ -1237,9 +1283,12 @@ function openTicket(id){
       <button class="x-btn" onclick="closeModal()">✕</button>
     </div>
     <div class="sheet-body">
-      <div style="font-weight:700;font-size:17px">${esc(storeName(sid))}</div>
+      <div class="detail-store">
+        <div style="font-weight:700;font-size:17px">${esc(storeName(sid))}</div>
+        ${storeGeoUrl(sid)?`<a class="btn btn-ghost btn-sm gps-btn" href="${escA(storeGeoUrl(sid))}" target="_blank" rel="noopener">📍 Open GPS</a>`:""}
+      </div>
       <div class="detail-desc">${esc(t.description||"No description")}</div>
-      ${photos?`<div class="photo-grid">${photos}</div>`:""}
+      ${photoThumbs(t)}
       <div class="detail-row"><span class="k">Category</span><span class="v">${CATEGORIES[t.category]||"Other"}</span></div>
       <div class="detail-row"><span class="k">Priority</span><span class="v">${PRIORITIES[t.priority]||"Normal"}</span></div>
       <div class="detail-row"><span class="k">Assigned</span><span class="v">${assignee?esc(assignee):"<span style='color:var(--ink-dim)'>Unassigned</span>"}</span></div>
@@ -1313,14 +1362,19 @@ function ticketControls(t){
 
   if(isClosed) return `<div class="section-label">Closed<span class="ln"></span></div><div style="color:var(--ink-dim);font-size:13px">Closed. Only Overwatch can reopen.</div>`;
 
-  // TECH actions
+  // TECH actions — keep it to one decision: where does this job go next?
   if(role==="tech"){
-    h+=`<div class="section-label">Job actions<span class="ln"></span></div><div style="display:flex;flex-direction:column;gap:9px">`;
-    if(!t.clockInAt) h+=`<button class="btn btn-primary btn-block" onclick="techClockIn('${t._id}')">⏱ Clock in &amp; start</button>`;
-    else h+=`<div class="detail-row" style="border:none;padding-top:0"><span class="k">Clocked in</span><span class="v">${fmtDate(t.clockInAt)}</span></div>`;
-    if(t.status!=="waiting") h+=`<button class="btn btn-ghost btn-block" onclick="openWaiting('${t._id}')">⏸ Set to waiting…</button>`;
-    if(t.status!=="finished") h+=`<button class="btn btn-primary btn-block fin" onclick="openFinish('${t._id}')">✓ Clock out &amp; mark finished</button>`;
-    h+=`</div>`;
+    const mv=(target,emoji,labelTxt,cls)=>{
+      const isCur=t.status===target;
+      const act=target==="finished"?`openFinish('${t._id}')`:(target==="in_progress"?`techStart('${t._id}')`:`openWaiting('${t._id}')`);
+      return `<button class="btn ${cls} btn-block${isCur?" tk-cur":""}" ${isCur?"disabled":""} onclick="${act}">${emoji} ${labelTxt}${isCur?" · now":""}</button>`;
+    };
+    h+=`<div class="section-label">Move this job to<span class="ln"></span></div>
+      <div style="display:flex;flex-direction:column;gap:9px">
+        ${mv("waiting","⏸","Waiting","btn-ghost")}
+        ${mv("in_progress","▶","In progress","btn-ghost")}
+        ${mv("finished","✓","Finished","btn-primary fin")}
+      </div>`;
     return h;
   }
 
@@ -1467,7 +1521,46 @@ async function doAssign(id){
   if(await patchTicket(id,patch,{action:"assign",note,toStatus:patch.status})){toast("Assignment updated");openTicket(id)}
 }
 async function techClockIn(id){
-  if(await patchTicket(id,{clockInAt:now(),status:"in_progress"},{action:"clockin",toStatus:"in_progress"})){toast("Clocked in");openTicket(id)}
+  techStart(id);
+}
+/* ---- one-job-in-progress rule (techs) ----
+   A tech can only have a single ticket "in progress" at a time. If they try to
+   start a second one while another is still running, we stop and ask whether
+   they already finished the other job. Saying yes runs the finish-photo flow on
+   the OTHER job first, then starts THIS one. Saying no just cancels. */
+function otherInProgress(exceptId){
+  if(!SESSION||SESSION.role!=="tech")return null;
+  const mine=myStoreIds();
+  for(const k of Object.keys(TICKETS)){
+    const t=TICKETS[k];
+    if(k!==exceptId && t.status==="in_progress" && mine.includes(t.storeId)) return {_id:k,...t};
+  }
+  return null;
+}
+function techStart(id){
+  const other=otherInProgress(id);
+  if(!other){doTechStart(id);return}
+  const desc=other.description?other.description.slice(0,60)+(other.description.length>60?"…":""):"the other job";
+  modal(`<div class="sheet-head"><h2>Finish the other job first?</h2><button class="x-btn" onclick="openTicket('${id}')">✕</button></div>
+    <div class="sheet-body">
+      <p style="margin:0 0 6px;color:var(--ink-mid);font-size:14px">You already have a job in progress:</p>
+      <div class="other-job">
+        <div class="oj-store">${esc(storeName(other.storeId))}</div>
+        <div class="oj-desc">${esc(desc)}</div>
+        <div class="oj-meta mono">⏱ ${elapsedHM(other.clockInAt)}</div>
+      </div>
+      <p style="margin:14px 0 0;color:var(--ink-mid);font-size:14px">Did you already finish it? We'll get a quick photo, mark it finished, then start this one.</p>
+    </div>
+    <div class="sheet-foot">
+      <button class="btn btn-ghost" style="flex:1" onclick="openTicket('${id}')">Not yet</button>
+      <button class="btn btn-primary" style="flex:1" onclick="openFinish('${other._id}',{thenStart:'${id}'})">Yes, finish it</button>
+    </div>`);
+}
+async function doTechStart(id){
+  if(TICKETS[id].status==="in_progress"){toast("Already in progress");return}
+  const t=TICKETS[id];const patch={status:"in_progress"};
+  if(!t.clockInAt)patch.clockInAt=now();
+  if(await patchTicket(id,patch,{action:"clockin",toStatus:"in_progress"})){toast("In progress");openTicket(id)}
 }
 async function techFinish(id){
   if(await patchTicket(id,{status:"finished",finishedAt:now(),clockOutAt:now()},{action:"clockout",toStatus:"finished"})){toast("Clocked out · finished");openTicket(id)}
@@ -1479,10 +1572,13 @@ async function techFinish(id){
    photo is required; on confirm we upload, append to the ticket's photos, and
    mark it finished (preserving the clock-out timestamps). */
 let finishPhotos=[];
-function openFinish(id){
+let finishThenStart=null; // ticket id to put in_progress after this finish (chaining)
+function openFinish(id,opts){
   finishPhotos=[];
+  finishThenStart=(opts&&opts.thenStart)||null;
   const camAttr = IS_MOBILE ? ' capture="environment"' : '';
-  modal(`<div class="sheet-head"><h2>Finish job</h2><button class="x-btn" onclick="openTicket('${id}')">✕</button></div>
+  const cancelAct = finishThenStart ? `closeModal()` : `openTicket('${id}')`;
+  modal(`<div class="sheet-head"><h2>Finish job</h2><button class="x-btn" onclick="${cancelAct}">✕</button></div>
     <div class="sheet-body">
       <p style="margin:0 0 14px;color:var(--ink-mid);font-size:14px">Add a quick photo of the completed work before you close this out.</p>
       <div class="upload-zone" id="finUz" onclick="$('finFile').click()">
@@ -1493,7 +1589,7 @@ function openFinish(id){
       <div class="preview-strip" id="finPreview"></div>
     </div>
     <div class="sheet-foot">
-      <button class="btn btn-ghost" style="flex:1" onclick="openTicket('${id}')">Cancel</button>
+      <button class="btn btn-ghost" style="flex:1" onclick="${cancelAct}">Cancel</button>
       <button class="btn btn-primary fin" style="flex:1" id="finConfirm" disabled onclick="confirmFinish('${id}')">✓ Mark finished</button>
     </div>`);
 }
@@ -1528,22 +1624,49 @@ async function confirmFinish(id){
   const patch={status:"finished",finishedAt:now(),photos};
   if(t&&t.clockInAt&&!t.clockOutAt)patch.clockOutAt=now();
   if(await patchTicket(id,patch,{action:"clockout",toStatus:"finished",note:`Finished with ${urls.length} photo${urls.length>1?"s":""}`})){
-    toast("Finished · photo added");finishPhotos=[];openTicket(id);
+    finishPhotos=[];
+    const next=finishThenStart;finishThenStart=null;
+    if(next){toast("Finished · starting next job");doTechStart(next);}
+    else{toast("Finished · photo added");openTicket(id);}
   }else if(btn){btn.disabled=false;btn.innerHTML="✓ Mark finished"}
 }
+let waitReason=null;
 function openWaiting(id){
-  const opts=WAITING_REASONS.map(r=>`<option value="${escA(r)}">${esc(r)}</option>`).join("");
-  modal(`<div class="sheet-head"><h2>Set to waiting</h2><button class="x-btn" onclick="openTicket('${id}')">✕</button></div>
+  waitReason=null;
+  const chips=WAITING_REASONS.map(r=>`<button type="button" class="wait-chip" data-r="${escA(r)}" onclick="pickWaitReason(this)">${esc(r)}</button>`).join("");
+  modal(`<div class="sheet-head"><h2>What are you waiting on?</h2><button class="x-btn" onclick="openTicket('${id}')">✕</button></div>
     <div class="sheet-body">
-      <div class="field"><label class="label">Reason</label><select class="input" id="wReason">${opts}</select></div>
-      <div class="field" style="margin-top:14px"><label class="label">Note (optional)</label><textarea class="input" id="wNote" placeholder="e.g. part ordered, ETA Friday"></textarea></div>
+      <div class="field"><label class="label">Reason</label>
+        <div class="wait-chips" id="wChips">${chips}</div>
+      </div>
+      <div class="field" style="margin-top:16px"><label class="label">Add a comment</label>
+        <textarea class="input" id="wNote" rows="3" placeholder="e.g. part ordered from supplier, ETA Friday"></textarea>
+        <div class="uz-h mono" style="margin-top:5px;color:var(--ink-dim)">Posts to the ticket so the store and your coach can see it.</div>
+      </div>
     </div>
     <div class="sheet-foot"><button class="btn btn-ghost" style="flex:1" onclick="openTicket('${id}')">Cancel</button>
-      <button class="btn btn-primary" style="flex:1" onclick="confirmWaiting('${id}')">Set waiting</button></div>`);
+      <button class="btn btn-primary" style="flex:1" id="wSet" disabled onclick="confirmWaiting('${id}')">⏸ Set to waiting</button></div>`);
+}
+function pickWaitReason(el){
+  waitReason=el.getAttribute("data-r");
+  document.querySelectorAll("#wChips .wait-chip").forEach(c=>c.classList.toggle("on",c===el));
+  const b=$("wSet");if(b)b.disabled=false;
 }
 async function confirmWaiting(id){
-  const reason=$("wReason").value, note=$("wNote").value.trim();
-  if(await patchTicket(id,{status:"waiting",waitingReason:reason},{action:"status",toStatus:"waiting",note:note?`${reason} — ${note}`:reason})){toast("Set to waiting");openTicket(id)}
+  if(!waitReason){toast("Pick what you're waiting on","err");return}
+  const note=($("wNote").value||"").trim();
+  const btn=$("wSet");if(btn){btn.disabled=true;btn.innerHTML='<span class="inline-spin"></span>'}
+  const t=TICKETS[id];
+  const patch={status:"waiting",waitingReason:waitReason};
+  // if the tech wrote something, post it as a real comment on the ticket thread
+  if(note){
+    const comments=Array.isArray(t.comments)?t.comments.slice():[];
+    comments.push({id:uid(),by:SESSION.name,role:SESSION.role,email:SESSION.email,text:`⏸ Waiting — ${waitReason}: ${note}`,ts:now()});
+    patch.comments=comments;
+  }
+  if(await patchTicket(id,patch,{action:"status",toStatus:"waiting",note:note?`${waitReason} — ${note}`:waitReason})){
+    toast("Set to waiting");waitReason=null;openTicket(id);
+  }else if(btn){btn.disabled=false;btn.innerHTML="⏸ Set to waiting"}
 }
 function openEdit(id){
   const t=TICKETS[id];editPhotos=(t.photos||[]).slice();
@@ -1696,6 +1819,7 @@ function isSkippable(el){
     el.classList.contains("cmt")||          // a comment
     el.classList.contains("tl-item")||      // activity row
     el.classList.contains("photo-grid")||   // photos
+    el.classList.contains("thumb-grid")||   // lazy photo thumbnails
     el.classList.contains("tk-photos")||
     el.classList.contains("preview-strip")||
     el.classList.contains("reftag")
