@@ -215,6 +215,20 @@ body.no-reftags .reftag{display:none}
 .hub-btn .hb-t{font-family:var(--disp);font-weight:800;font-size:17px}
 .hub-btn .hb-d{font-size:13px;color:var(--ink-dim);line-height:1.4}
 .hub-btn.accent{background:linear-gradient(135deg,rgba(255,176,0,.12),transparent 70%);border-color:var(--amber-deep)}
+.store-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+.store-tile{display:flex;flex-direction:column;justify-content:space-between;gap:14px;min-height:120px;text-align:left;
+  background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;transition:.15s;cursor:pointer}
+.store-tile:hover{border-color:var(--amber);transform:translateY(-2px);box-shadow:var(--shadow)}
+.store-tile.has-open{border-left:4px solid var(--amber)}
+.store-tile .st-top{display:flex;flex-direction:column;gap:3px}
+.store-tile .st-name{font-weight:700;font-size:15px;line-height:1.25}
+.store-tile .st-num{font-size:11px;color:var(--ink-dim)}
+.store-tile .st-foot{display:flex;align-items:baseline;gap:9px}
+.store-tile .st-count{font-family:var(--disp);font-weight:800;font-size:30px;line-height:1;color:var(--ink-dim)}
+.store-tile.has-open .st-count{color:var(--amber-deep)}
+.store-tile .st-sub{font-size:12px;color:var(--ink-dim)}
+.back-link{background:none;border:none;color:var(--ink-dim);font-size:13px;font-weight:600;padding:0 0 6px;cursor:pointer}
+.back-link:hover{color:var(--amber-deep)}
 
 /* ===== MODAL ===== */
 .overlay{position:fixed;inset:0;z-index:60;background:rgba(26,34,48,.45);backdrop-filter:blur(4px);display:flex;align-items:flex-end;justify-content:center;opacity:0;pointer-events:none;transition:.2s}
@@ -503,6 +517,7 @@ let curFilter="active", curSearch="", curStore="all", tilesExpanded=false, curAs
 let selectMode=false, selectedIds={}; // bulk-action selection (finished/closed pages)
 let openGroups={};          // storeId -> bool (expanded)
 let managerScreen="hub";
+let coachScreen="hub";   // "hub" (store tiles) or a storeId (drilled into one store)
 let pollTimer=null;
 
 /* ============================================================ API */
@@ -761,7 +776,7 @@ function startViewAs(kind,id){
   if(!sim){toast("Couldn't load that view","err");return}
   if(!REAL_SESSION)REAL_SESSION=SESSION;       // remember the real admin session once
   SESSION=sim;
-  managerScreen="hub";
+  managerScreen="hub"; coachScreen="hub";
   openGroups={}; myStoreIds().forEach(s=>openGroups[s]=true);
   document.body.classList.add("simulating");
   enterAppChrome();
@@ -773,7 +788,7 @@ function returnToMyAccount(){
   SESSION=REAL_SESSION; REAL_SESSION=null;
   document.body.classList.remove("simulating");
   const b=$("simBanner"); if(b)b.remove();
-  managerScreen="hub";
+  managerScreen="hub"; coachScreen="hub";
   openGroups={}; myStoreIds().forEach(s=>openGroups[s]=true);
   enterAppChrome();
   render();
@@ -869,7 +884,7 @@ function enterApp(){
   enterAppChrome();
   if(SESSION.role==="tech" && (curFilter==="active"||curFilter==="all")) curFilter="dispatched";
   if(SESSION.role==="tech") requestTechLocation();
-  managerScreen="hub";
+  managerScreen="hub"; coachScreen="hub";
   myStoreIds().forEach(id=>openGroups[id]=true);
   render();
   startPoll();
@@ -905,6 +920,10 @@ async function manualRefresh(){const b=$("refreshBtn");b.style.transform="rotate
 function render(){
   const v=$("mainView");
   if(SESSION.role==="manager"&&managerScreen==="hub"){v.innerHTML=renderManagerHub();applyTags();return}
+  if(SESSION.role==="coach"){
+    v.innerHTML = (coachScreen==="hub") ? renderCoachHub() : renderCoachStore(coachScreen);
+    applyTags();return;
+  }
   v.innerHTML=renderBoard();
   applyTags();
 }
@@ -935,6 +954,80 @@ function renderManagerHub(){
     </button>
     <div class="section-label" style="margin-top:0">Your open tickets · ${open.length}<span class="ln"></span></div>
     ${cards}`;
+}
+
+/* ---- area coach hub: a tile per store with its open-ticket count.
+   Top button opens a ticket for ANY of their stores; each tile drills into that
+   store's ticket list, where they can also open a ticket for just that store. */
+function coachStoreList(){
+  return myStoreIds().slice().sort((a,b)=>storeName(a).localeCompare(storeName(b)));
+}
+function renderCoachHub(){
+  const ids=coachStoreList();
+  const openCount=sid=>ticketsForStore(sid).filter(t=>ACTIVE_STATUSES.includes(t.status)).length;
+  const totalOpen=ids.reduce((n,sid)=>n+openCount(sid),0);
+  const tiles=ids.map(sid=>{
+    const n=openCount(sid);
+    const sub=n===0?"All clear":(n+" open ticket"+(n===1?"":"s"));
+    return `<button class="store-tile${n>0?" has-open":""}" onclick="openCoachStore('${sid}')">
+      <div class="st-top">
+        <div class="st-name">${esc(storeName(sid))}</div>
+        ${storeNum(sid)?`<div class="st-num mono">${esc(storeNum(sid))}</div>`:""}
+      </div>
+      <div class="st-foot">
+        <div class="st-count">${n}</div>
+        <div class="st-sub">${sub}</div>
+      </div>
+    </button>`;
+  }).join("");
+  return `
+    <div class="page-head">
+      <div>
+        <div class="page-title">Your stores</div>
+        <div class="page-meta">${esc(SESSION.name)} · ${ids.length} store${ids.length===1?"":"s"} · ${totalOpen} open</div>
+      </div>
+    </div>
+    <button class="hub-btn accent" style="width:100%;margin-bottom:20px" onclick="openCreate()">
+      <div class="hb-ic">📝</div><div class="hb-t">New ticket</div>
+      <div class="hb-d">Open a ticket for any of your stores.</div>
+    </button>
+    ${ids.length?`<div class="store-grid">${tiles}</div>`
+      :`<div class="empty"><div class="empty-mark">🏪</div><h3>No stores in your area</h3><p>Managed in the master.</p></div>`}`;
+}
+function openCoachStore(sid){coachScreen=sid;render();}
+function coachBackToHub(){coachScreen="hub";render();}
+function renderCoachStore(sid){
+  // Guard: if the store isn't theirs (or vanished), bounce to the hub.
+  if(!coachStoreList().includes(sid)){coachScreen="hub";return renderCoachHub();}
+  const all=ticketsForStore(sid);
+  const open=all.filter(t=>ACTIVE_STATUSES.includes(t.status)).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+  const done=all.filter(t=>!ACTIVE_STATUSES.includes(t.status)).sort((a,b)=>(b.updatedAt||b.createdAt||0)-(a.updatedAt||a.createdAt||0));
+  const dir=storeDirector(sid), tech=storeTech(sid);
+  const openCards=open.length
+    ? `<div class="rows">${open.map(ticketRow).join("")}</div>`
+    : `<div class="empty" style="padding:34px 20px"><div class="empty-mark">✅</div><h3>No open tickets</h3><p>All clear at this store.</p></div>`;
+  const doneBlock=done.length
+    ? `<div class="section-label" style="margin-top:22px">Recently finished · ${done.length}<span class="ln"></span></div><div class="rows">${done.map(ticketRow).join("")}</div>`
+    : "";
+  return `
+    <div class="page-head">
+      <div>
+        <button class="back-link" onclick="coachBackToHub()">‹ All stores</button>
+        <div class="page-title">${esc(storeName(sid))}</div>
+        <div class="page-meta">${storeNum(sid)?esc(storeNum(sid))+" · ":""}${open.length} open</div>
+      </div>
+    </div>
+    <div class="sg-people" style="padding:0 0 16px">
+      ${dir?`<span><b>Director:</b> ${esc(dir.name)}</span>`:""}
+      ${tech?`<span><b>Tech:</b> ${esc(tech.name)}</span>`:`<span style="color:var(--ink-dim)">No tech assigned</span>`}
+    </div>
+    <button class="hub-btn accent" style="width:100%;margin-bottom:20px" onclick="openCreate('${sid}')">
+      <div class="hb-ic">📝</div><div class="hb-t">New ticket for this store</div>
+      <div class="hb-d">Open a ticket for ${esc(storeName(sid))}.</div>
+    </button>
+    <div class="section-label" style="margin-top:0">Open tickets · ${open.length}<span class="ln"></span></div>
+    ${openCards}
+    ${doneBlock}`;
 }
 
 /* ---- board: stores first, then their tickets ---- */
@@ -1411,6 +1504,7 @@ async function submitTicket(){
     await apiWrite(`${TICKETS_NODE}/${id}`,ticket);
     await refresh();closeModal();toast("Ticket created · "+shortId);
     if(SESSION.role==="manager")managerScreen="list";
+    if(SESSION.role==="coach")coachScreen=sid;   // drop them onto the store they just filed for
     openGroups[sid]=true;render();
   }catch(e){toast(e.message||"Could not create ticket","err");btn.disabled=false;btn.textContent="Create ticket"}
 }
@@ -1734,25 +1828,24 @@ async function techFinish(id){
 }
 
 /* ---- finish with a required photo (mobile-first) ----
-   Tapping "Finished" anywhere a tech can opens this sheet. One big tap target
-   opens the camera straight away on a phone (capture=environment). At least one
-   photo is required; on confirm we upload, append to the ticket's photos, and
-   mark it finished (preserving the clock-out timestamps). */
+   Tapping "Finished" anywhere a tech can opens this sheet. The picker lets them
+   either take a new photo or choose one from their gallery. At least one photo
+   is required; on confirm we upload, append to the ticket's photos, and mark it
+   finished (preserving the clock-out timestamps). */
 let finishPhotos=[];
 let finishThenStart=null; // ticket id to put in_progress after this finish (chaining)
 function openFinish(id,opts){
   finishPhotos=[];
   finishThenStart=(opts&&opts.thenStart)||null;
-  const camAttr = IS_MOBILE ? ' capture="environment"' : '';
   const cancelAct = finishThenStart ? `closeModal()` : `openTicket('${id}')`;
   modal(`<div class="sheet-head"><h2>Finish job</h2><button class="x-btn" onclick="${cancelAct}">✕</button></div>
     <div class="sheet-body">
-      <p style="margin:0 0 14px;color:var(--ink-mid);font-size:14px">Add a quick photo of the completed work before you close this out.</p>
+      <p style="margin:0 0 14px;color:var(--ink-mid);font-size:14px">Add a photo of the completed work before you close this out.</p>
       <div class="upload-zone" id="finUz" onclick="$('finFile').click()">
-        <div class="uz-ic">📸</div><div class="uz-t">Take a photo</div>
-        <div class="uz-h mono">${IS_MOBILE?"opens your camera":"tap to choose a photo"}</div>
+        <div class="uz-ic">📸</div><div class="uz-t">Add a photo</div>
+        <div class="uz-h mono">${IS_MOBILE?"take one or pick from your gallery":"tap to choose a photo"}</div>
       </div>
-      <input type="file" id="finFile" accept="image/*"${camAttr} multiple style="display:none" onchange="addFinishPhotos('${id}',this)">
+      <input type="file" id="finFile" accept="image/*" multiple style="display:none" onchange="addFinishPhotos('${id}',this)">
       <div class="preview-strip" id="finPreview"></div>
     </div>
     <div class="sheet-foot">
