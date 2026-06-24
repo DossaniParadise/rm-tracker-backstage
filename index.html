@@ -231,12 +231,14 @@ body.no-reftags .reftag{display:none}
 .back-link:hover{color:var(--amber-deep)}
 
 /* ===== MODAL ===== */
-.overlay{position:fixed;inset:0;z-index:60;background:rgba(26,34,48,.45);backdrop-filter:blur(4px);display:flex;align-items:flex-end;justify-content:center;opacity:0;pointer-events:none;transition:.2s}
+.overlay{position:fixed;inset:0;z-index:60;background:rgba(26,34,48,.45);backdrop-filter:blur(4px);display:flex;align-items:flex-end;justify-content:center;opacity:0;pointer-events:none;transition:.2s;padding:48px 14px 14px}
 .overlay.on{opacity:1;pointer-events:auto}
-@media(min-width:640px){.overlay{align-items:center;padding:24px}}
-.sheet{background:var(--panel);border:1px solid var(--line);width:100%;max-width:560px;max-height:92vh;overflow-y:auto;border-radius:18px 18px 0 0;transform:translateY(20px);transition:.25s}
+@media(min-width:640px){.overlay{align-items:center;padding:40px 24px}}
+.sheet{position:relative;background:var(--panel);border:1px solid var(--line);width:100%;max-width:520px;max-height:calc(100vh - 96px);overflow-y:auto;border-radius:18px;transform:translateY(20px);transition:.25s;box-shadow:var(--shadow)}
+@media(max-width:639px){.sheet{max-height:calc(100vh - 62px)}}
 .overlay.on .sheet{transform:translateY(0)}
-@media(min-width:640px){.sheet{border-radius:16px}}
+.x-float{position:absolute;top:14px;right:14px;z-index:5}
+.sheet-head:has(.x-btn){padding-right:20px}
 .sheet-head{position:sticky;top:0;z-index:2;background:var(--panel);display:flex;align-items:center;gap:12px;padding:18px 20px;border-bottom:1px solid var(--line-soft)}
 .sheet-head h2{font-family:var(--disp);font-weight:800;font-size:19px;margin:0;flex:1}
 .sheet-body{padding:20px}
@@ -628,7 +630,7 @@ function requestTechLocation(force){
   showLocConsent();
 }
 function showLocConsent(){
-  modal(`<div class="sheet-head"><h2>Share your location?</h2></div>
+  modal(`<div class="sheet-head"><h2>Share your location?</h2><button class="x-btn" aria-label="Close" onclick="declineLocation()">✕</button></div>
     <div class="sheet-body">
       <div class="loc-consent">
         <div class="lc-ic">📍</div>
@@ -1439,7 +1441,11 @@ let activeModal=null;
 function modal(html){
   let o=$("modalOverlay");
   if(!o){o=document.createElement("div");o.id="modalOverlay";o.className="overlay";document.body.appendChild(o);o.addEventListener("click",e=>{if(e.target===o)closeModal()})}
-  o.innerHTML=`<div class="sheet">${html}</div>`;
+  // Guarantee a close affordance: if the modal's own markup doesn't include an
+  // X button, inject a floating one in the top-right that dismisses the modal.
+  const hasOwnX = /class="x-btn"/.test(html);
+  const autoX = hasOwnX ? "" : `<button class="x-btn x-float" aria-label="Close" onclick="closeModal()">✕</button>`;
+  o.innerHTML=`<div class="sheet">${autoX}${html}</div>`;
   requestAnimationFrame(()=>{o.classList.add("on");applyTags()});
   activeModal=o;
 }
