@@ -162,6 +162,10 @@ body.no-reftags .reftag{display:none}
 .tl-dot2{width:7px;height:7px;border-radius:50%;background:var(--ink-dim);flex-shrink:0}
 .tl-ping .tl-co{margin:0;flex:1}
 .tl-ago{font-size:11px;color:var(--ink-dim);white-space:nowrap}
+.loc-consent{text-align:center;padding:6px 4px}
+.loc-consent .lc-ic{font-size:40px;margin-bottom:8px}
+.loc-consent p{margin:6px 0;font-size:15px}
+.loc-consent .lc-sub{font-size:13px;color:var(--ink-mid);line-height:1.5}
 .row-main{flex:1;min-width:0}
 .row-top{display:flex;align-items:center;gap:8px;margin-bottom:2px}
 .row-store{font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -596,8 +600,35 @@ function storeGeoUrl(rid){
 let TECH_LOC=null;          // {lat,lng} once known
 let _locAsked=false;
 let _lastLocPush=0;
+const LOC_CONSENT_KEY="dpm_tech_loc_consent";
+function locConsent(){try{return localStorage.getItem(LOC_CONSENT_KEY)}catch(e){return null}}
+function setLocConsent(v){try{localStorage.setItem(LOC_CONSENT_KEY,v)}catch(e){}}
+// Entry point: ask for consent first (once), then the browser's own prompt.
 function requestTechLocation(force){
   if(!("geolocation" in navigator)) return;
+  const consent=locConsent();
+  if(consent==="no" && !force) return;          // they declined; don't nag
+  if(consent==="yes"){ doRequestLocation(force); return; }
+  // No decision yet (or re-asking): show our own notice first.
+  showLocConsent();
+}
+function showLocConsent(){
+  modal(`<div class="sheet-head"><h2>Share your location?</h2></div>
+    <div class="sheet-body">
+      <div class="loc-consent">
+        <div class="lc-ic">📍</div>
+        <p><b>Share approximate location with your manager?</b></p>
+        <p class="lc-sub">Allows you to sort jobs closest to you, and lets dispatch see roughly where you are. Your location is only an approximate point, updated when you open the app.</p>
+      </div>
+    </div>
+    <div class="sheet-foot">
+      <button class="btn btn-ghost" style="flex:1" onclick="declineLocation()">Not now</button>
+      <button class="btn btn-primary" style="flex:1" onclick="allowLocation()">Allow</button>
+    </div>`);
+}
+function allowLocation(){setLocConsent("yes");closeModal();doRequestLocation(true);}
+function declineLocation(){setLocConsent("no");closeModal();}
+function doRequestLocation(force){
   if(_locAsked && !force) return;
   _locAsked=true;
   navigator.geolocation.getCurrentPosition(
@@ -606,7 +637,7 @@ function requestTechLocation(force){
       reportTechLocation(TECH_LOC);
       if(SESSION&&SESSION.role==="tech")render();
     },
-    err=>{/* denied or unavailable — silently fall back to recency sort */},
+    err=>{/* denied at the browser level — fall back to recency sort */},
     {enableHighAccuracy:true,timeout:10000,maximumAge:300000}
   );
 }
@@ -641,6 +672,22 @@ function distanceMiles(a,b){
   return R*2*Math.atan2(Math.sqrt(s),Math.sqrt(1-s));
 }
 function ticketDistance(t){return TECH_LOC?distanceMiles(TECH_LOC,storeCoords(t.storeId)):null}
+/* Friendly label for a coordinate: if it's close to one of our stores, say
+   "Near <store #>" — otherwise fall back to the raw coordinates. ~0.4 mi covers
+   "at/just outside the store"; beyond that we don't claim proximity. */
+function nearestStoreLabel(lat,lng){
+  let best=null,bestD=Infinity;
+  for(const rid of Object.keys(RESTAURANTS)){
+    const c=storeCoords(rid); if(!c)continue;
+    const d=distanceMiles({lat,lng},c);
+    if(d!=null && d<bestD){bestD=d;best=rid;}
+  }
+  if(best && bestD<=0.4){
+    const tag=storeNum(best)||storeName(best);
+    return `Near ${tag}`;
+  }
+  return `${lat.toFixed(3)}, ${lng.toFixed(3)}`;
+}
 
 /* ============================================================ LOGIN */
 async function doLogin(){
@@ -787,13 +834,13 @@ function myStoreIds(){
 // plus what they've finished. No unassigned/assigned/closed.
 const TECH_VISIBLE_STATUSES=["dispatched","waiting","in_progress","finished"];
 function ticketsForStore(sid){
+  const techStore = SESSION.role==="tech" && RESTAURANTS[sid] && RESTAURANTS[sid].assignedRepairTechnicianId===SESSION.refId;
   return Object.keys(TICKETS).map(k=>({_id:k,...TICKETS[k]}))
     .filter(t=>t.storeId===sid)
     .filter(t=>SESSION.role==="admin" || t.status!=="closed")
     .filter(t=>SESSION.role!=="tech" || TECH_VISIBLE_STATUSES.includes(t.status))
-    // A tech only sees tickets actually dispatched to THEM, not every ticket at
-    // a store they cover. Dispatch is recorded on the ticket as assignedTechId.
-    .filter(t=>SESSION.role!=="tech" || t.assignedTechId===SESSION.refId);
+    // Tech: ticket is theirs if dispatched to them, or tech-less at their store.
+    .filter(t=>SESSION.role!=="tech" || t.assignedTechId===SESSION.refId || (!t.assignedTechId && techStore));
 }
 
 /* ============================================================ PERMISSIONS */
@@ -895,12 +942,14 @@ function renderBoard(){
   let storeIds=myStoreIds();
   let allTickets=[];
   if(SESSION.role==="tech"){
-    // Techs are scoped by dispatch, not store coverage: pull every ticket
-    // dispatched to this tech (any store), then derive the store list from
-    // those tickets so the location filter only shows relevant stores.
+    // A tech sees a ticket if it's dispatched specifically to them
+    // (assignedTechId === their id). If a ticket has NO specific tech on it,
+    // fall back to store coverage so tech-less jobs at their own stores still
+    // show. Jobs explicitly dispatched to a DIFFERENT tech stay hidden.
+    const myStores=new Set(Object.keys(RESTAURANTS).filter(r=>RESTAURANTS[r].assignedRepairTechnicianId===SESSION.refId));
     allTickets=Object.keys(TICKETS).map(k=>({_id:k,...TICKETS[k]}))
-      .filter(t=>t.assignedTechId===SESSION.refId)
-      .filter(t=>TECH_VISIBLE_STATUSES.includes(t.status));
+      .filter(t=>TECH_VISIBLE_STATUSES.includes(t.status))
+      .filter(t=> t.assignedTechId===SESSION.refId || (!t.assignedTechId && myStores.has(t.storeId)) );
     storeIds=[...new Set(allTickets.map(t=>t.storeId))];
   }else{
     storeIds.forEach(sid=>{allTickets=allTickets.concat(ticketsForStore(sid))});
@@ -1647,9 +1696,11 @@ async function techClockIn(id){
    the OTHER job first, then starts THIS one. Saying no just cancels. */
 function otherInProgress(exceptId){
   if(!SESSION||SESSION.role!=="tech")return null;
+  const mine=new Set(Object.keys(RESTAURANTS).filter(r=>RESTAURANTS[r].assignedRepairTechnicianId===SESSION.refId));
   for(const k of Object.keys(TICKETS)){
     const t=TICKETS[k];
-    if(k!==exceptId && t.status==="in_progress" && t.assignedTechId===SESSION.refId) return {_id:k,...t};
+    if(k===exceptId || t.status!=="in_progress") continue;
+    if(t.assignedTechId===SESSION.refId || (!t.assignedTechId && mine.has(t.storeId))) return {_id:k,...t};
   }
   return null;
 }
@@ -1834,7 +1885,7 @@ function openTechLocations(){
     const history=pings.slice(1).map(p=>`
       <a class="tl-ping" href="${mapsLink(p.lat,p.lng)}" target="_blank" rel="noopener">
         <span class="tl-dot2"></span>
-        <span class="tl-co mono">${p.lat.toFixed(3)}, ${p.lng.toFixed(3)}</span>
+        <span class="tl-co">${esc(nearestStoreLabel(p.lat,p.lng))}</span>
         <span class="tl-ago">${timeAgo(p.ts)}</span>
       </a>`).join("");
     return `<div class="tl-card">
@@ -1842,7 +1893,7 @@ function openTechLocations(){
       <a class="tl-last" href="${mapsLink(last.lat,last.lng)}" target="_blank" rel="noopener">
         <div class="tl-last-main">
           <div class="tl-last-label">📍 Last seen ${timeAgo(last.ts)}</div>
-          <div class="tl-co mono">${last.lat.toFixed(3)}, ${last.lng.toFixed(3)}</div>
+          <div class="tl-co">${esc(nearestStoreLabel(last.lat,last.lng))}</div>
           <div class="tl-when">${fmtDate(last.ts)}</div>
         </div>
         <div class="tl-open">Open ›</div>
