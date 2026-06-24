@@ -922,7 +922,7 @@ async function manualRefresh(){const b=$("refreshBtn");b.style.transform="rotate
 function render(){
   const v=$("mainView");
   if(SESSION.role==="manager"&&managerScreen==="hub"){v.innerHTML=renderManagerHub();applyTags();return}
-  if(SESSION.role==="coach"){
+  if(SESSION.role==="coach"||SESSION.role==="director"){
     v.innerHTML = (coachScreen==="hub") ? renderCoachHub() : renderCoachStore(coachScreen);
     applyTags();return;
   }
@@ -1004,7 +1004,7 @@ function renderCoachStore(sid){
   const all=ticketsForStore(sid);
   const open=all.filter(t=>ACTIVE_STATUSES.includes(t.status)).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
   const done=all.filter(t=>!ACTIVE_STATUSES.includes(t.status)).sort((a,b)=>(b.updatedAt||b.createdAt||0)-(a.updatedAt||a.createdAt||0));
-  const dir=storeDirector(sid), tech=storeTech(sid);
+  const dir=storeDirector(sid), coach=storeCoach(sid), tech=storeTech(sid);
   const openCards=open.length
     ? `<div class="rows">${open.map(ticketRow).join("")}</div>`
     : `<div class="empty" style="padding:34px 20px"><div class="empty-mark">✅</div><h3>No open tickets</h3><p>All clear at this store.</p></div>`;
@@ -1021,6 +1021,7 @@ function renderCoachStore(sid){
     </div>
     <div class="sg-people" style="padding:0 0 16px">
       ${dir?`<span><b>Director:</b> ${esc(dir.name)}</span>`:""}
+      ${coach?`<span><b>Coach:</b> ${esc(coach.name)}</span>`:""}
       ${tech?`<span><b>Tech:</b> ${esc(tech.name)}</span>`:`<span style="color:var(--ink-dim)">No tech assigned</span>`}
     </div>
     <button class="hub-btn accent" style="width:100%;margin-bottom:20px" onclick="openCreate('${sid}')">
@@ -1522,7 +1523,7 @@ async function submitTicket(){
     await apiWrite(`${TICKETS_NODE}/${id}`,ticket);
     await refresh();closeModal();toast("Ticket created · "+shortId);
     if(SESSION.role==="manager")managerScreen="list";
-    if(SESSION.role==="coach")coachScreen=sid;   // drop them onto the store they just filed for
+    if(SESSION.role==="coach"||SESSION.role==="director")coachScreen=sid;   // drop them onto the store they just filed for
     openGroups[sid]=true;render();
   }catch(e){toast(e.message||"Could not create ticket","err");btn.disabled=false;btn.textContent="Create ticket"}
 }
