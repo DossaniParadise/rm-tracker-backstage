@@ -1340,6 +1340,18 @@ function ticketRow(t){
         ${b("finished","✓","Finished")}
       </div></div>`;
   }
+  // ----- store-access per-row actions (coach / manager / director) -----
+  // Quick access to "Mark in progress" and "Close ticket" right from the list,
+  // without opening each ticket. No finish button here (tech/overwatch only).
+  if(["coach","manager","director"].includes(SESSION.role) && t.status!=="closed"){
+    const canProgress = t.status!=="in_progress" && t.status!=="finished";
+    below=`<div class="row-bar" onclick="event.stopPropagation()">
+      <span>${t.status==="in_progress"?`<b>In progress</b> · ${elapsedHM(t.clockInAt)}`:"Quick actions"}</span>
+      <div class="rb-btns">
+        ${canProgress?`<button class="btn btn-ghost btn-sm" onclick="setStatus('${t._id}','in_progress')">▶ In progress</button>`:""}
+        <button class="btn btn-danger btn-sm" onclick="confirmClose('${t._id}')">✕ Close</button>
+      </div></div>`;
+  }
   // selection checkbox (select mode, finished/closed pages)
   const showChk = selectMode && (curFilter==="finished"||curFilter==="closed");
   const chk = showChk ? `<label class="row-chk" onclick="event.stopPropagation()"><input type="checkbox" ${selectedIds[t._id]?"checked":""} onchange="toggleSel('${t._id}',this.checked)"></label>` : "";
@@ -1638,17 +1650,15 @@ function ticketControls(t){
     return h;
   }
 
-  // STORE-ACCESS people (manager / coach / director): progress, finish, close
+  // STORE-ACCESS people (manager / coach / director): mark in progress + close.
+  // Mark FINISHED is intentionally NOT offered here — finishing is a tech /
+  // overwatch action only. Closing is available to all store-access roles.
   if(hasStoreAccess()){
     h+=`<div class="section-label">Update job<span class="ln"></span></div><div style="display:flex;flex-direction:column;gap:9px">`;
     if(t.status!=="in_progress" && t.status!=="finished")
       h+=`<button class="btn btn-ghost btn-block" onclick="setStatus('${t._id}','in_progress')">▶ Mark in progress</button>`;
-    // waiting allowed for overwatch+tech per spec; managers/coaches/directors skip it
-    if(t.status!=="finished")
-      h+=`<button class="btn btn-primary btn-block fin" onclick="setStatus('${t._id}','finished')">✓ Mark finished</button>`;
-    if(role!=="manager")
-      h+=`<button class="btn btn-danger btn-block" onclick="setStatus('${t._id}','closed')">✕ Close ticket</button>`;
-    h+=`</div>${role!=="manager"?`<div style="font-size:11px;color:var(--ink-dim);margin-top:8px">Closing removes the ticket from all views except Overwatch.</div>`:""}`;
+    h+=`<button class="btn btn-danger btn-block" onclick="confirmClose('${t._id}')">✕ Close ticket</button>`;
+    h+=`</div><div style="font-size:11px;color:var(--ink-dim);margin-top:8px">Closing removes the ticket from all views except Overwatch.</div>`;
     return h;
   }
   return h;
@@ -1685,6 +1695,27 @@ async function patchTicket(id,patch,activityEntry){
 async function setStatus(id,status){
   if(TICKETS[id].status===status){toast("Already in that status");return}
   if(await patchTicket(id,{status},{action:"status",toStatus:status})){toast(`Status → ${STATUSES[status].label}`);openTicket(id)}
+}
+/* Close is destructive (removes the ticket from every view except Overwatch),
+   so confirm first. Works from the detail sheet or straight from a list row. */
+function confirmClose(id){
+  const t=TICKETS[id];if(!t)return;
+  modal(`<div class="sheet-head"><h2>Close this ticket?</h2><button class="x-btn" onclick="closeModal()">✕</button></div>
+    <div class="sheet-body">
+      <p style="margin:0;color:var(--ink-mid);font-size:14px">${esc(storeName(t.storeId))} · ${esc(t.shortId||"")}</p>
+      <p style="margin:10px 0 0;font-size:14px">${esc(t.description||"")}</p>
+      <p style="margin:14px 0 0;color:var(--ink-dim);font-size:13px">Once closed, this ticket disappears from all dashboards except Overwatch. Only Overwatch can reopen it.</p>
+    </div>
+    <div class="sheet-foot">
+      <button class="btn btn-ghost" style="flex:1" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-danger" style="flex:1" id="closeConfirm" onclick="doClose('${id}')">✕ Close ticket</button>
+    </div>`);
+}
+async function doClose(id){
+  const btn=$("closeConfirm");if(btn){btn.disabled=true;btn.innerHTML='<span class="inline-spin"></span> Closing…'}
+  if(await patchTicket(id,{status:"closed"},{action:"status",toStatus:"closed"})){
+    toast("Ticket closed");closeModal();render();
+  }else if(btn){btn.disabled=false;btn.innerHTML="✕ Close ticket"}
 }
 
 /* ============================================================ BULK ACTIONS (admin, finished/closed pages) */
