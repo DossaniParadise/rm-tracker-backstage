@@ -1057,7 +1057,7 @@ const API_BASE_URL = "https://alignment-api-khaki.vercel.app/api/dpm-alignment";
 const APP_WRITE_PASSWORD = "rm123"; // must match ROLES.MAINTENANCE on the API
 const IMGBB_API_KEY = "b733862d15744e2bfaa4329d122f4ba0";
 const POLL_MS = 20000;
-const APP_VERSION = "9.13";
+const APP_VERSION = "9.14";
 let   SHOW_REF_TAGS = false; // default OFF — toggle with the # button in the top bar
 
 const ROLE_PASSWORDS = {
@@ -1125,6 +1125,12 @@ const NOTIFY_SECRET = "fixmi-9f3kd82ncv-2026";   // must match FIXMI_SHARED_SECR
    not make a saved ticket look unsaved. Failures land in the console. */
 /* "🔧 Gino Rossi (in-house)" — the notifier can't work this out on its own for
    vendors, and an email saying who it went to is the whole point. */
+function threadForEmail(t){
+  return (Array.isArray(t&&t.comments)?t.comments:[]).slice(-25).map(c=>({
+    by:c.by, role:c.role, email:c.email, text:c.text, ts:c.ts,
+    ...(Array.isArray(c.photos)&&c.photos.length?{photos:c.photos.slice(0,4)}:{})
+  }));
+}
 function assigneeLabelFor(t){
   if(!t)return "";
   if(t.assignedTechId){const n=techName(t.assignedTechId);return n?("🔧 "+n+" (in-house)"):"Tech (removed)"}
@@ -3653,7 +3659,7 @@ async function guestAddComment(){
   try{
     await apiWrite(`${TICKETS_NODE}/${id}`,updated);
     TICKETS[id]=updated;LOCAL_ECHO[id]=updated;
-    notifyTicket("comment",id,updated,{comment:{by,text,photos},actorName:by,actorEmail:email});
+    notifyTicket("comment",id,updated,{comment:{by,text,photos,ts:now()},thread:threadForEmail(updated),actorName:by,actorEmail:email});
     showLoader(false);cmtPhotos=[];toast("Comment posted");renderGuest();
   }catch(e){showLoader(false);toast(e.message||"Couldn't post — try again","err");btn.disabled=false;btn.textContent="Post comment"}
 }
@@ -3869,7 +3875,7 @@ async function addComment(id){
     ...(photos.length?{photos}:{})});
   const ok=await patchTicket(id,{comments},null); // comment is its own log; no activity entry needed
   if(ok){
-    notifyTicket("comment",id,TICKETS[id],{comment:{by:SESSION.name,text,photos}});
+    notifyTicket("comment",id,TICKETS[id],{comment:{by:SESSION.name,text,photos,ts:now()},thread:threadForEmail(TICKETS[id])});
     cmtPhotos=[];toast("Comment posted");openTicket(id)
   }
   else{btn.disabled=false;btn.textContent="Post comment"}
