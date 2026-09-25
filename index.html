@@ -1105,8 +1105,8 @@ const TICKETS_NODE = "maintenanceTickets";
    techs and outside vendors on share links all load it. So the app only says
    "ticket X just did Y"; the function looks the store up in the master and mails
    that store's own people. Leave NOTIFY_URL empty to switch notifications off. */
-const NOTIFY_URL = "";                       // e.g. "https://fixmi-notify.vercel.app/api/notify"
-const NOTIFY_SECRET = "";                    // must match FIXMI_SHARED_SECRET on the function
+const NOTIFY_URL = "https://fixmi-notify.vercel.app/api/notify";                       // e.g. "https://fixmi-notify.vercel.app/api/notify"
+const NOTIFY_SECRET = "fixmi-9f3kd82ncv-2026";                    // must match FIXMI_SHARED_SECRET on the function
 /* Never blocks the UI and never shows an error: a notification that fails must
    not make a saved ticket look unsaved. Failures land in the console. */
 function notifyTicket(event,id,ticket,extra){
