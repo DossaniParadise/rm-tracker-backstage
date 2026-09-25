@@ -506,6 +506,20 @@ button.inv-success:hover{background:rgba(5,150,105,.14)}
 .nt-table input[type=checkbox]{width:19px;height:19px;accent-color:var(--amber)}
 .nt-who{font-weight:700}
 .nt-note{font-size:11.5px;color:var(--ink-dim);margin-top:1px}
+.chk-list{margin-top:12px;display:flex;flex-direction:column;gap:6px}
+.chk-row{display:flex;gap:10px;align-items:flex-start;padding:9px 11px;border:1px solid var(--line);border-radius:9px;background:var(--panel-2)}
+.chk-row.ok{border-color:rgba(5,150,105,.45)}
+.chk-row.bad{border-color:rgba(232,9,27,.45)}
+.chk-row.warn{border-color:rgba(234,88,12,.5)}
+.chk-ico{font-weight:800;width:16px;text-align:center;color:var(--ink-dim);flex:0 0 auto;line-height:1.5}
+.chk-row.ok .chk-ico{color:var(--green)}
+.chk-row.bad .chk-ico{color:#e8091b}
+.chk-row.warn .chk-ico{color:#ea580c}
+.chk-body{min-width:0;flex:1}
+.chk-l{font-size:13px;font-weight:700}
+.chk-m{font-size:12px;color:var(--ink-mid);margin-top:2px;word-break:break-word}
+.chk-fix{font-size:12px;color:#b45309;margin-top:4px}
+.chk-role{font-family:var(--mono);font-size:10px;color:var(--ink-dim)}
 .ow-tip{position:absolute;z-index:5;pointer-events:none;opacity:0;transition:opacity .12s;
   background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:9px 11px;
   box-shadow:0 6px 20px rgba(20,30,45,.16);max-width:230px}
@@ -1043,7 +1057,7 @@ const API_BASE_URL = "https://alignment-api-khaki.vercel.app/api/dpm-alignment";
 const APP_WRITE_PASSWORD = "rm123"; // must match ROLES.MAINTENANCE on the API
 const IMGBB_API_KEY = "b733862d15744e2bfaa4329d122f4ba0";
 const POLL_MS = 20000;
-const APP_VERSION = "9.11";
+const APP_VERSION = "9.12";
 let   SHOW_REF_TAGS = false; // default OFF — toggle with the # button in the top bar
 
 const ROLE_PASSWORDS = {
@@ -1482,6 +1496,147 @@ let coachScreen="hub";   // "hub" (store tiles) or a storeId (drilled into one s
 const DEFAULT_VIEW_BY_ROLE={admin:"map",tech:"list",director:"tiles",coach:"tiles",manager:"tiles",support:"tiles"};
 let VIEW_DEFAULTS={...DEFAULT_VIEW_BY_ROLE};
 let owView=null;                 // resolved on entry from the role default
+/* ---- connection checker (v9.12) --------------------------------------------
+   Walks the chain one hop at a time and says which hop is broken, instead of
+   leaving "no email arrived" to be guessed at. Nothing here sends mail except
+   the last step, which you press separately. */
+const CHK=[
+  {key:"config", label:"This build has the notifier address"},
+  {key:"reach",  label:"The notifier answers"},
+  {key:"secret", label:"The shared secret matches"},
+  {key:"server", label:"The notifier's own settings"},
+  {key:"who",    label:"Who a real ticket would reach"},
+];
+let _chk={};
+function chkRow(k){
+  const st=_chk[k]||{};
+  const ico=st.state==="ok"?"✓":st.state==="bad"?"✕":st.state==="warn"?"!":st.state==="run"?"…":"·";
+  return `<div class="chk-row ${st.state||""}">
+    <span class="chk-ico">${ico}</span>
+    <div class="chk-body"><div class="chk-l">${esc((CHK.find(c=>c.key===k)||{}).label||k)}</div>
+      ${st.msg?`<div class="chk-m">${st.msg}</div>`:""}
+      ${st.fix?`<div class="chk-fix">${st.fix}</div>`:""}</div></div>`;
+}
+function renderCheck(){
+  const el=$("chkOut"); if(!el)return;
+  el.innerHTML=CHK.map(c=>chkRow(c.key)).join("");
+}
+function chkSet(k,state,msg,fix){_chk[k]={state,msg,fix};renderCheck();}
+/* POST to the notifier and always come back with something readable, whatever
+   went wrong — a thrown fetch here usually means CORS or a dead URL. */
+async function chkPost(payload,ms){
+  try{
+    const r=await fetchWithTimeout(NOTIFY_URL,{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({secret:NOTIFY_SECRET,...payload})},ms||15000);
+    let j=null;try{j=await r.json()}catch(e){}
+    return {status:r.status,body:j};
+  }catch(e){return {status:0,error:e.message||String(e)}}
+}
+async function runConnectionCheck(){
+  const btn=$("chkRun"); if(btn){btn.disabled=true;btn.innerHTML='<span class="inline-spin"></span> Checking…';}
+  _chk={}; CHK.forEach(c=>_chk[c.key]={state:""}); renderCheck();
+  const done=()=>{if(btn){btn.disabled=false;btn.textContent="Run the check again"}};
+
+  // 1 — is this build even configured?
+  chkSet("config","run");
+  if(!NOTIFY_URL||!NOTIFY_SECRET){
+    chkSet("config","bad","NOTIFY_URL or NOTIFY_SECRET is empty in this build of index.html.",
+      "You're running a build with the lines blank. Upload the version that has them filled in, then hard-refresh (Ctrl+Shift+R).");
+    ["reach","secret","server","who"].forEach(k=>chkSet(k,"","Skipped — nothing to connect to."));
+    return done();
+  }
+  chkSet("config","ok",esc(NOTIFY_URL));
+
+  // 2 — does anything answer there? (GET is refused by design: that's a good sign)
+  chkSet("reach","run");
+  let reachable=false;
+  try{
+    const r=await fetchWithTimeout(NOTIFY_URL,{method:"GET"},12000);
+    if(r.status===405){chkSet("reach","ok","The notifier is live (it refused a plain browser visit, which is correct).");reachable=true;}
+    else if(r.status===404)chkSet("reach","bad","That address returns 404 — nothing is deployed at this path.",
+      "Check the URL ends in /api/notify, and that notify.js sits at api/notify.js in the repo.");
+    else {chkSet("reach","warn","Unexpected reply: HTTP "+r.status+".");reachable=true;}
+  }catch(e){
+    chkSet("reach","bad","Could not reach it at all ("+esc(e.message||e)+").",
+      "Usually a wrong domain, a deleted Vercel project, or FIXMI_ALLOW_ORIGIN blocking this site. Try opening the URL in a new tab — you should see {\"error\":\"POST only\"}.");
+  }
+  if(!reachable){["secret","server","who"].forEach(k=>chkSet(k,"","Skipped."));return done()}
+
+  // 3 — secret + CORS, without sending anything: a deliberately invalid event
+  chkSet("secret","run");
+  const probe=await chkPost({event:"__probe__"});
+  if(probe.status===0){
+    chkSet("secret","bad","The browser couldn't complete the request ("+esc(probe.error)+").",
+      "This is nearly always CORS. In Vercel set FIXMI_ALLOW_ORIGIN to "+esc(location.origin)+" (or * while testing) and redeploy.");
+    ["server","who"].forEach(k=>chkSet(k,"","Skipped."));return done();
+  }
+  if(probe.status===401){
+    chkSet("secret","bad","The notifier rejected the secret.",
+      "NOTIFY_SECRET in this build doesn't match FIXMI_SHARED_SECRET in Vercel. Make them identical (watch for stray spaces) and redeploy.");
+    ["server","who"].forEach(k=>chkSet(k,"","Skipped."));return done();
+  }
+  if(probe.status===400) chkSet("secret","ok","Accepted, and the browser is allowed to call it.");
+  else if(probe.status===500) chkSet("secret","bad",esc((probe.body&&probe.body.error)||"Server error."),"Set the missing variable in Vercel, then redeploy.");
+  else chkSet("secret","warn","Unexpected HTTP "+probe.status+".");
+
+  // 4 — how the notifier itself is configured
+  chkSet("server","run");
+  const ids=Object.keys(TICKETS).sort((a,b)=>(TICKETS[b].createdAt||0)-(TICKETS[a].createdAt||0));
+  const probeId=ids[0]||"";
+  const st=await chkPost({event:"selftest",ticketId:probeId,ticket:probeId?{storeId:TICKETS[probeId].storeId,shortId:TICKETS[probeId].shortId}:undefined});
+  if(st.status!==200||!st.body){
+    chkSet("server","bad","selftest failed"+(st.body&&st.body.error?": "+esc(st.body.error):" (HTTP "+st.status+")."),
+      st.status===400?"Your deployed notify.js is an older copy that doesn't know this check. Paste the newest notify.js into api/notify.js and let Vercel redeploy.":"");
+    chkSet("who","","Skipped.");return done();
+  }
+  const b=st.body, bits=[];
+  bits.push("From: "+esc(b.from));
+  bits.push("Stream: "+esc(b.stream));
+  bits.push("Tickets visible to it: "+b.ticketsSeen);
+  let bad=null,warn=null;
+  if(!b.tokenPresent) bad="POSTMARK_TOKEN is not set in Vercel — nothing can ever be sent.";
+  else if(b.notifyOff) bad="FIXMI_NOTIFY_OFF is set to 1 in Vercel, which blocks every email.";
+  else if(b.dryRun) warn="FIXMI_DRY_RUN is still set to 1 — it logs instead of sending. Delete that variable in Vercel and redeploy.";
+  else if(!b.prefs.on) warn="\"Send notification emails\" is unticked above.";
+  if(b.prefs.testMode) bits.push("Test mode ON → "+(b.prefs.testTo.length?esc(b.prefs.testTo.join(", ")):"<b>no test addresses set</b>"));
+  if(!b.prefsFound) bits.push("No saved settings yet — using the built-in defaults.");
+  chkSet("server",bad?"bad":(warn?"warn":"ok"),bits.join(" · "),bad||warn||"");
+
+  // 5 — who a real ticket resolves to
+  chkSet("who","run");
+  if(!b.ticket){chkSet("who","warn","No ticket to test with — file one, then run this again.");return done()}
+  const t=b.ticket;
+  if(!t.recipients.length){
+    chkSet("who","bad","Ticket "+esc(t.shortId||t.id)+" ("+esc(t.store)+") resolves to nobody.",
+      b.prefs.testMode?"Test mode is on but the test address list is empty — fill it in above and save."
+        :"Either every box is unticked above, or those people have no email address on their FindMi records.");
+  }else{
+    chkSet("who","ok","Ticket "+esc(t.shortId||t.id)+" → "+t.recipients.map(r=>esc(r.email)+" <span class=\"chk-role\">"+esc(r.role)+"</span>").join(", ")+
+      "<br>Subject would be: "+esc(t.subject||""));
+  }
+  done();
+}
+async function sendConnectionTest(){
+  const btn=$("chkSend"); if(!btn)return;
+  const to=(SESSION&&SESSION.email)||"";
+  if(!to)return toast("No email on your session","err");
+  btn.disabled=true;btn.innerHTML='<span class="inline-spin"></span> Sending…';
+  const r=await chkPost({event:"sendtest",to:[to]},20000);
+  btn.disabled=false;btn.textContent="Send me a real test email";
+  const out=$("chkSendOut");
+  if(r.status===200&&r.body&&r.body.ok){
+    out.innerHTML=`<div class="chk-row ok"><span class="chk-ico">✓</span><div class="chk-body"><div class="chk-l">Postmark accepted it for ${esc(to)}</div><div class="chk-m">Check that inbox, then Postmark → Activity. If it never lands, the answer is in Activity.</div></div></div>`;
+  }else{
+    const d=(r.body&&(r.body.detail||r.body.error))||r.error||("HTTP "+r.status);
+    const txt=typeof d==="string"?d:JSON.stringify(d);
+    let fix="";
+    if(/signature|not confirmed|400/i.test(txt))fix="Postmark → Sender Signatures → dossaniparadise.com needs DKIM verified before it will send.";
+    else if(/inactive/i.test(txt))fix="Postmark suppressed that address after an earlier bounce. Postmark → Suppressions → reactivate it.";
+    else if(/domains you don/i.test(txt))fix="Your Postmark account isn't approved yet, so it can only email your own verified domains.";
+    out.innerHTML=`<div class="chk-row bad"><span class="chk-ico">✕</span><div class="chk-body"><div class="chk-l">Postmark refused it</div><div class="chk-m">${esc(txt)}</div>${fix?`<div class="chk-fix">${esc(fix)}</div>`:""}</div></div>`;
+  }
+}
+
 /* ---- who gets notification emails (v9.8) ------------------------------------
    Lives in the master at admins/notifyPrefs so it is shared by everyone AND
    readable by the notifier, which is what actually enforces it. Editing this
@@ -6695,7 +6850,15 @@ function openSettings(){
           ${NOTIFY_EVENTS.map(e=>`<td class="nt-c">${chk("nt_"+r.key+"_"+e.key,np.roles[r.key][e.key])}</td>`).join("")}
         </tr>`).join("");
   const email=`
-      <div class="section-label">Email notifications<span class="ln"></span></div>
+      <div class="section-label">Connection check<span class="ln"></span></div>
+      <p class="set-hint">Tests the chain one hop at a time — this app, the notifier, its settings, and who a real ticket would reach. Nothing is emailed until you press the second button.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button type="button" class="btn btn-primary btn-sm" id="chkRun" onclick="runConnectionCheck()">Run the check</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="chkSend" onclick="sendConnectionTest()">Send me a real test email</button>
+      </div>
+      <div id="chkOut" class="chk-list"></div>
+      <div id="chkSendOut"></div>
+      <div class="section-label" style="margin-top:24px">Email notifications<span class="ln"></span></div>
       <p class="set-hint">Who gets an email when a ticket is filed, its status moves, or someone comments. Saved centrally \u2014 it takes effect immediately for everyone, with nothing to redeploy. Whoever performed the action is never emailed about their own change.</p>
       <label class="cat-chk"><input type="checkbox" id="ntOn"${np.on?" checked":""}>
         <span><b>Send notification emails</b><br><span style="font-weight:400;color:var(--ink-dim);font-size:12px">Untick to silence everything at once without changing anything else.</span></span></label>
