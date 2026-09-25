@@ -501,7 +501,7 @@ button.inv-success:hover{background:rgba(5,150,105,.14)}
 .set-kv span:first-child{color:var(--ink-mid)}
 .nt-table{width:100%;border-collapse:collapse;margin-top:14px;font-size:13.5px}
 .nt-table th{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-dim);font-weight:700;padding:0 6px 8px;text-align:left}
-.nt-table th.nt-c,.nt-table td.nt-c{text-align:center;width:88px}
+.nt-table th.nt-c,.nt-table td.nt-c{text-align:center;width:72px}
 .nt-table td{padding:10px 6px;border-top:1px solid var(--line-soft);vertical-align:middle}
 .nt-table input[type=checkbox]{width:19px;height:19px;accent-color:var(--amber)}
 .nt-who{font-weight:700}
@@ -1043,7 +1043,7 @@ const API_BASE_URL = "https://alignment-api-khaki.vercel.app/api/dpm-alignment";
 const APP_WRITE_PASSWORD = "rm123"; // must match ROLES.MAINTENANCE on the API
 const IMGBB_API_KEY = "b733862d15744e2bfaa4329d122f4ba0";
 const POLL_MS = 20000;
-const APP_VERSION = "9.8";
+const APP_VERSION = "9.10";
 let   SHOW_REF_TAGS = false; // default OFF — toggle with the # button in the top bar
 
 const ROLE_PASSWORDS = {
@@ -1105,8 +1105,8 @@ const TICKETS_NODE = "maintenanceTickets";
    techs and outside vendors on share links all load it. So the app only says
    "ticket X just did Y"; the function looks the store up in the master and mails
    that store's own people. Leave NOTIFY_URL empty to switch notifications off. */
-const NOTIFY_URL = "https://fixmi-notify.vercel.app/api/notify";                       // e.g. "https://fixmi-notify.vercel.app/api/notify"
-const NOTIFY_SECRET = "fixmi-9f3kd82ncv-2026";                    // must match FIXMI_SHARED_SECRET on the function
+const NOTIFY_URL = "";                       // e.g. "https://fixmi-notify.vercel.app/api/notify"
+const NOTIFY_SECRET = "";                    // must match FIXMI_SHARED_SECRET on the function
 /* Never blocks the UI and never shows an error: a notification that fails must
    not make a saved ticket look unsaved. Failures land in the console. */
 function notifyTicket(event,id,ticket,extra){
@@ -1117,7 +1117,14 @@ function notifyTicket(event,id,ticket,extra){
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify({
         secret:NOTIFY_SECRET,event,ticketId:id,
-        ticket:{status:ticket.status,shortId:ticket.shortId,shareToken:ticket.shareToken,storeId:ticket.storeId},
+        ticket:{
+          shortId:ticket.shortId, shareToken:ticket.shareToken, storeId:ticket.storeId,
+          status:ticket.status, priority:ticket.priority,
+          category:ticket.category, subcategory:ticket.subcategory, categoryLabel:catPath(ticket),
+          description:ticket.description, photos:ticket.photos,
+          createdAt:ticket.createdAt, createdBy:ticket.createdBy, createdByName:ticket.createdByName,
+          assignedTechId:ticket.assignedTechId, assignedVendorId:ticket.assignedVendorId,
+        },
         actorName:(SESSION&&SESSION.name)||"",actorEmail:(SESSION&&SESSION.email)||"",
         ...(extra||{})
       })
@@ -1486,10 +1493,12 @@ const NOTIFY_ROLES=[
   {key:"tech",    label:"Assigned technician",note:"only once someone is assigned"},
   {key:"reporter",label:"Reported by",        note:"whoever filed the ticket"},
 ];
+const NOTIFY_EVENTS=[{key:"created",label:"New ticket"},{key:"status",label:"Status change"},{key:"comment",label:"Comment"}];
 const NOTIFY_DEFAULTS={
   on:true,
-  roles:{director:{created:true,status:true}, dm:{created:true,status:true}, gm:{created:true,status:true},
-         tech:{created:false,status:false},   reporter:{created:false,status:false}},
+  roles:{director:{created:true,status:true,comment:true}, dm:{created:true,status:true,comment:true},
+         gm:{created:true,status:true,comment:true},
+         tech:{created:false,status:false,comment:false}, reporter:{created:false,status:false,comment:false}},
   testMode:false, testTo:[], alwaysTo:[],
 };
 let NOTIFY_PREFS={...NOTIFY_DEFAULTS};
@@ -1500,7 +1509,12 @@ function loadNotifyPrefs(){
     if(typeof st.on==="boolean")out.on=st.on;
     if(typeof st.testMode==="boolean")out.testMode=st.testMode;
     if(st.roles&&typeof st.roles==="object")
-      NOTIFY_ROLES.forEach(r=>{const v=st.roles[r.key];if(v&&typeof v==="object")out.roles[r.key]={created:!!v.created,status:!!v.status}});
+      NOTIFY_ROLES.forEach(r=>{
+        const v=st.roles[r.key]; if(!v||typeof v!=="object")return;
+        // A record saved before comments existed has no `comment` key — keep this
+        // role's default rather than reading undefined as "off".
+        NOTIFY_EVENTS.forEach(e=>{if(v[e.key]!==undefined)out.roles[r.key][e.key]=!!v[e.key]});
+      });
     ["testTo","alwaysTo"].forEach(k=>{
       const v=st[k];
       out[k]=Array.isArray(v)?v.filter(Boolean):(typeof v==="string"?v.split(/[,;\s]+/).filter(Boolean):[]);
@@ -3474,6 +3488,7 @@ async function guestAddComment(){
   try{
     await apiWrite(`${TICKETS_NODE}/${id}`,updated);
     TICKETS[id]=updated;LOCAL_ECHO[id]=updated;
+    notifyTicket("comment",id,updated,{comment:{by,text,photos},actorName:by,actorEmail:email});
     showLoader(false);cmtPhotos=[];toast("Comment posted");renderGuest();
   }catch(e){showLoader(false);toast(e.message||"Couldn't post — try again","err");btn.disabled=false;btn.textContent="Post comment"}
 }
@@ -3688,7 +3703,10 @@ async function addComment(id){
   comments.push({id:uid(),by:SESSION.name,role:SESSION.role,email:SESSION.email,text,ts:now(),
     ...(photos.length?{photos}:{})});
   const ok=await patchTicket(id,{comments},null); // comment is its own log; no activity entry needed
-  if(ok){cmtPhotos=[];toast("Comment posted");openTicket(id)}
+  if(ok){
+    notifyTicket("comment",id,TICKETS[id],{comment:{by:SESSION.name,text,photos}});
+    cmtPhotos=[];toast("Comment posted");openTicket(id)
+  }
   else{btn.disabled=false;btn.textContent="Post comment"}
 }
 /* ---- who can do what (new lifecycle) ----
@@ -6674,16 +6692,15 @@ function openSettings(){
   const notifyRows=NOTIFY_ROLES.map(r=>`
         <tr data-nrole="${r.key}">
           <td><div class="nt-who">${esc(r.label)}</div><div class="nt-note">${esc(r.note)}</div></td>
-          <td class="nt-c">${chk("nt_"+r.key+"_created",np.roles[r.key].created)}</td>
-          <td class="nt-c">${chk("nt_"+r.key+"_status",np.roles[r.key].status)}</td>
+          ${NOTIFY_EVENTS.map(e=>`<td class="nt-c">${chk("nt_"+r.key+"_"+e.key,np.roles[r.key][e.key])}</td>`).join("")}
         </tr>`).join("");
   const email=`
       <div class="section-label">Email notifications<span class="ln"></span></div>
-      <p class="set-hint">Who gets an email when a ticket is filed or its status moves. Saved centrally \u2014 it takes effect immediately for everyone, with nothing to redeploy.</p>
+      <p class="set-hint">Who gets an email when a ticket is filed, its status moves, or someone comments. Saved centrally \u2014 it takes effect immediately for everyone, with nothing to redeploy. Whoever performed the action is never emailed about their own change.</p>
       <label class="cat-chk"><input type="checkbox" id="ntOn"${np.on?" checked":""}>
         <span><b>Send notification emails</b><br><span style="font-weight:400;color:var(--ink-dim);font-size:12px">Untick to silence everything at once without changing anything else.</span></span></label>
       <table class="nt-table">
-        <thead><tr><th>Who</th><th class="nt-c">New ticket</th><th class="nt-c">Status change</th></tr></thead>
+        <thead><tr><th>Who</th>${NOTIFY_EVENTS.map(e=>`<th class="nt-c">${esc(e.label)}</th>`).join("")}</tr></thead>
         <tbody>${notifyRows}</tbody>
       </table>
       <div class="section-label" style="margin-top:22px">Testing<span class="ln"></span></div>
@@ -6802,7 +6819,7 @@ async function saveSettings(){
       const prefs={on:$("ntOn").checked,testMode:$("ntTest").checked,
         testTo:emails($("ntTestTo").value),alwaysTo:emails($("ntAlwaysTo").value),
         roles:{},updatedAt:now(),updatedBy:SESSION.email};
-      NOTIFY_ROLES.forEach(r=>{prefs.roles[r.key]={created:$("nt_"+r.key+"_created").checked,status:$("nt_"+r.key+"_status").checked}});
+      NOTIFY_ROLES.forEach(r=>{prefs.roles[r.key]={};NOTIFY_EVENTS.forEach(e=>{prefs.roles[r.key][e.key]=$("nt_"+r.key+"_"+e.key).checked})});
       if(prefs.testMode&&!prefs.testTo.length){
         showLoader(false);btn.disabled=false;btn.textContent="Save";
         setSettingsTab("email");
