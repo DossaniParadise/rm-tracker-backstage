@@ -1057,7 +1057,7 @@ const API_BASE_URL = "https://alignment-api-khaki.vercel.app/api/dpm-alignment";
 const APP_WRITE_PASSWORD = "rm123"; // must match ROLES.MAINTENANCE on the API
 const IMGBB_API_KEY = "b733862d15744e2bfaa4329d122f4ba0";
 const POLL_MS = 20000;
-const APP_VERSION = "9.12";
+const APP_VERSION = "9.13";
 let   SHOW_REF_TAGS = false; // default OFF — toggle with the # button in the top bar
 
 const ROLE_PASSWORDS = {
@@ -1123,6 +1123,14 @@ const NOTIFY_URL = "https://fixmi-notify.vercel.app/api/notify";
 const NOTIFY_SECRET = "fixmi-9f3kd82ncv-2026";   // must match FIXMI_SHARED_SECRET on the Vercel function
 /* Never blocks the UI and never shows an error: a notification that fails must
    not make a saved ticket look unsaved. Failures land in the console. */
+/* "🔧 Gino Rossi (in-house)" — the notifier can't work this out on its own for
+   vendors, and an email saying who it went to is the whole point. */
+function assigneeLabelFor(t){
+  if(!t)return "";
+  if(t.assignedTechId){const n=techName(t.assignedTechId);return n?("🔧 "+n+" (in-house)"):"Tech (removed)"}
+  if(t.assignedVendorId){const v=VENDORS[t.assignedVendorId];return v?("🏢 "+v.name+" (third-party)"):"Vendor (removed)"}
+  return "";
+}
 function notifyTicket(event,id,ticket,extra){
   if(!NOTIFY_URL||!NOTIFY_SECRET)return;
   try{
@@ -1138,6 +1146,8 @@ function notifyTicket(event,id,ticket,extra){
           description:ticket.description, photos:ticket.photos,
           createdAt:ticket.createdAt, createdBy:ticket.createdBy, createdByName:ticket.createdByName,
           assignedTechId:ticket.assignedTechId, assignedVendorId:ticket.assignedVendorId,
+          assigneeLabel:assigneeLabelFor(ticket),
+          closeNote:ticket.closeNote, waitingReason:ticket.waitingReason,
         },
         actorName:(SESSION&&SESSION.name)||"",actorEmail:(SESSION&&SESSION.email)||"",
         ...(extra||{})
@@ -4008,6 +4018,7 @@ function refreshInBackground(){
 async function patchTicket(id,patch,activityEntry){
   const t=TICKETS[id];if(!t){toast("Ticket not found","err");return}
   const prevStatus=t.status;
+  const prevAssignee=(t.assignedTechId||"")+"|"+(t.assignedVendorId||"");
   const activity=Array.isArray(t.activity)?t.activity.slice():[];
   if(activityEntry)activity.push({ts:now(),by:SESSION.name,role:SESSION.role,...activityEntry});
   const updated={...t,...patch,activity,updatedAt:now()};
@@ -4021,9 +4032,14 @@ async function patchTicket(id,patch,activityEntry){
     // Echo the write locally so the UI reflects it IMMEDIATELY — the CDN copy
     // of the master can lag ~60s, and waiting on it made every click feel dead.
     TICKETS[id]=updated; LOCAL_ECHO[id]=updated;
-    // Only a real status MOVE is news — assigning, commenting and minting a
-    // share token all come through here too.
-    if(patch&&patch.status&&patch.status!==prevStatus)notifyTicket("status",id,updated,{prevStatus});
+    /* News is a real status move OR a change of who the ticket is on. Handing a
+       job from one tech to another keeps the status at "dispatched", so on the
+       status test alone that reassignment went out silently. */
+    const nowAssignee=(updated.assignedTechId||"")+"|"+(updated.assignedVendorId||"");
+    const assigneeChanged=nowAssignee!==prevAssignee;
+    const statusMoved=!!(patch&&patch.status&&patch.status!==prevStatus);
+    if(statusMoved||assigneeChanged)
+      notifyTicket("status",id,updated,{prevStatus,assigneeChanged,assignee:assigneeLabelFor(updated)});
     showLoader(false); render(); refreshInBackground(); return true
   }
   catch(e){showLoader(false);toast(e.message||"Update failed","err");return false}
