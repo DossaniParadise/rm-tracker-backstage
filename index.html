@@ -499,6 +499,13 @@ button.inv-success:hover{background:rgba(5,150,105,.14)}
 .set-hint{color:var(--ink-dim);font-size:13px;margin-top:0}
 .set-kv{display:flex;justify-content:space-between;gap:12px;padding:8px 2px;border-bottom:1px solid var(--line-soft);font-size:13px}
 .set-kv span:first-child{color:var(--ink-mid)}
+.nt-table{width:100%;border-collapse:collapse;margin-top:14px;font-size:13.5px}
+.nt-table th{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-dim);font-weight:700;padding:0 6px 8px;text-align:left}
+.nt-table th.nt-c,.nt-table td.nt-c{text-align:center;width:88px}
+.nt-table td{padding:10px 6px;border-top:1px solid var(--line-soft);vertical-align:middle}
+.nt-table input[type=checkbox]{width:19px;height:19px;accent-color:var(--amber)}
+.nt-who{font-weight:700}
+.nt-note{font-size:11.5px;color:var(--ink-dim);margin-top:1px}
 .ow-tip{position:absolute;z-index:5;pointer-events:none;opacity:0;transition:opacity .12s;
   background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:9px 11px;
   box-shadow:0 6px 20px rgba(20,30,45,.16);max-width:230px}
@@ -1036,7 +1043,7 @@ const API_BASE_URL = "https://alignment-api-khaki.vercel.app/api/dpm-alignment";
 const APP_WRITE_PASSWORD = "rm123"; // must match ROLES.MAINTENANCE on the API
 const IMGBB_API_KEY = "b733862d15744e2bfaa4329d122f4ba0";
 const POLL_MS = 20000;
-const APP_VERSION = "9.7";
+const APP_VERSION = "9.8";
 let   SHOW_REF_TAGS = false; // default OFF — toggle with the # button in the top bar
 
 const ROLE_PASSWORDS = {
@@ -1468,6 +1475,39 @@ let coachScreen="hub";   // "hub" (store tiles) or a storeId (drilled into one s
 const DEFAULT_VIEW_BY_ROLE={admin:"map",tech:"list",director:"tiles",coach:"tiles",manager:"tiles",support:"tiles"};
 let VIEW_DEFAULTS={...DEFAULT_VIEW_BY_ROLE};
 let owView=null;                 // resolved on entry from the role default
+/* ---- who gets notification emails (v9.8) ------------------------------------
+   Lives in the master at admins/notifyPrefs so it is shared by everyone AND
+   readable by the notifier, which is what actually enforces it. Editing this
+   in Settings changes behaviour instantly — no redeploy, no app rebuild. */
+const NOTIFY_ROLES=[
+  {key:"director",label:"Director",           note:"the store's Director"},
+  {key:"dm",      label:"District Manager",   note:"every DM on the store"},
+  {key:"gm",      label:"General Manager",    note:"the store's own login"},
+  {key:"tech",    label:"Assigned technician",note:"only once someone is assigned"},
+  {key:"reporter",label:"Reported by",        note:"whoever filed the ticket"},
+];
+const NOTIFY_DEFAULTS={
+  on:true,
+  roles:{director:{created:true,status:true}, dm:{created:true,status:true}, gm:{created:true,status:true},
+         tech:{created:false,status:false},   reporter:{created:false,status:false}},
+  testMode:false, testTo:[], alwaysTo:[],
+};
+let NOTIFY_PREFS={...NOTIFY_DEFAULTS};
+function loadNotifyPrefs(){
+  const st=(MASTER.admins||{}).notifyPrefs;
+  const out=JSON.parse(JSON.stringify(NOTIFY_DEFAULTS));
+  if(st&&typeof st==="object"){
+    if(typeof st.on==="boolean")out.on=st.on;
+    if(typeof st.testMode==="boolean")out.testMode=st.testMode;
+    if(st.roles&&typeof st.roles==="object")
+      NOTIFY_ROLES.forEach(r=>{const v=st.roles[r.key];if(v&&typeof v==="object")out.roles[r.key]={created:!!v.created,status:!!v.status}});
+    ["testTo","alwaysTo"].forEach(k=>{
+      const v=st[k];
+      out[k]=Array.isArray(v)?v.filter(Boolean):(typeof v==="string"?v.split(/[,;\s]+/).filter(Boolean):[]);
+    });
+  }
+  NOTIFY_PREFS=out;
+}
 function loadViewDefaults(){
   const st=(MASTER.admins||{}).viewDefaults;
   VIEW_DEFAULTS={...DEFAULT_VIEW_BY_ROLE};
@@ -1590,6 +1630,7 @@ async function refresh(){
   });
   loadCategories();
   loadViewDefaults();
+  loadNotifyPrefs();
   checkAppVersion();
 }
 /* ---- single source of truth for the APP CODE itself ----
@@ -6628,6 +6669,34 @@ function openSettings(){
     .map(([id,d])=>`<option value="${id}">${esc(d.name||id)}</option>`).join("");
   const dmOpts=Object.entries(MASTER.areaCoaches||{}).sort((a,b)=>(a[1].name||"").localeCompare(b[1].name||""))
     .map(([id,c])=>`<option value="${id}">${esc(c.name||id)}</option>`).join("");
+  const np=NOTIFY_PREFS;
+  const chk=(id,on)=>`<input type="checkbox" id="${id}"${on?" checked":""}>`;
+  const notifyRows=NOTIFY_ROLES.map(r=>`
+        <tr data-nrole="${r.key}">
+          <td><div class="nt-who">${esc(r.label)}</div><div class="nt-note">${esc(r.note)}</div></td>
+          <td class="nt-c">${chk("nt_"+r.key+"_created",np.roles[r.key].created)}</td>
+          <td class="nt-c">${chk("nt_"+r.key+"_status",np.roles[r.key].status)}</td>
+        </tr>`).join("");
+  const email=`
+      <div class="section-label">Email notifications<span class="ln"></span></div>
+      <p class="set-hint">Who gets an email when a ticket is filed or its status moves. Saved centrally \u2014 it takes effect immediately for everyone, with nothing to redeploy.</p>
+      <label class="cat-chk"><input type="checkbox" id="ntOn"${np.on?" checked":""}>
+        <span><b>Send notification emails</b><br><span style="font-weight:400;color:var(--ink-dim);font-size:12px">Untick to silence everything at once without changing anything else.</span></span></label>
+      <table class="nt-table">
+        <thead><tr><th>Who</th><th class="nt-c">New ticket</th><th class="nt-c">Status change</th></tr></thead>
+        <tbody>${notifyRows}</tbody>
+      </table>
+      <div class="section-label" style="margin-top:22px">Testing<span class="ln"></span></div>
+      <label class="cat-chk"><input type="checkbox" id="ntTest"${np.testMode?" checked":""}>
+        <span><b>Test mode \u2014 send everything to me instead</b><br><span style="font-weight:400;color:var(--ink-dim);font-size:12px">Nobody above receives anything. Every email goes to the addresses below and the subject is prefixed [TEST].</span></span></label>
+      <div class="field" style="margin-top:10px"><label class="label">Test addresses</label>
+        <input class="input" id="ntTestTo" value="${escA((np.testTo||[]).join(", "))}" placeholder="you@dossaniparadise.com, someone@else.com" autocapitalize="off" spellcheck="false">
+        <div class="uz-h mono" style="margin-top:5px;color:var(--ink-dim)">Separate several with commas. Only used while test mode is on.</div>
+      </div>
+      <div class="field" style="margin-top:14px"><label class="label">Always copy (optional)</label>
+        <input class="input" id="ntAlwaysTo" value="${escA((np.alwaysTo||[]).join(", "))}" placeholder="itsupport@dossaniparadise.com" autocapitalize="off" spellcheck="false">
+        <div class="uz-h mono" style="margin-top:5px;color:var(--ink-dim)">These people get every notification on top of the table above. Ignored in test mode.</div>
+      </div>`;
   const tab=(k,label)=>`<button type="button" class="set-tab${_setTab===k?" on":""}" data-tab="${k}" onclick="setSettingsTab('${k}')">${label}</button>`;
   const pane=(k,inner)=>`<div class="set-pane${_setTab===k?"":" hidden"}" data-pane="${k}">${inner}</div>`;
 
@@ -6678,8 +6747,9 @@ function openSettings(){
   modal(`
     <div class="sheet-head"><h2>Settings</h2><button class="x-btn" onclick="closeModal()">✕</button></div>
     <div class="sheet-body">
-      <div class="set-tabs">${tab("people","People")}${tab("tickets","Tickets")}${tab("app","App")}</div>
+      <div class="set-tabs">${tab("people","People")}${tab("email","Email")}${tab("tickets","Tickets")}${tab("app","App")}</div>
       ${pane("people",people)}
+      ${pane("email",email)}
       ${pane("tickets",tickets)}
       ${pane("app",app)}
     </div>
@@ -6725,6 +6795,22 @@ async function saveSettings(){
     document.querySelectorAll("#vdRows .vd-row").forEach(r=>{vd[r.getAttribute("data-role")]=r.querySelector("select").value});
     await apiWrite("admins/viewDefaults",vd);
     MASTER.admins=MASTER.admins||{};MASTER.admins.viewDefaults=vd;loadViewDefaults();
+    // Who gets notification emails. The notifier reads this same record, so a
+    // change here is live everywhere the moment it saves.
+    if($("ntOn")){
+      const emails=v=>String(v||"").split(/[,;\s]+/).map(x=>x.trim().toLowerCase()).filter(x=>x.includes("@"));
+      const prefs={on:$("ntOn").checked,testMode:$("ntTest").checked,
+        testTo:emails($("ntTestTo").value),alwaysTo:emails($("ntAlwaysTo").value),
+        roles:{},updatedAt:now(),updatedBy:SESSION.email};
+      NOTIFY_ROLES.forEach(r=>{prefs.roles[r.key]={created:$("nt_"+r.key+"_created").checked,status:$("nt_"+r.key+"_status").checked}});
+      if(prefs.testMode&&!prefs.testTo.length){
+        showLoader(false);btn.disabled=false;btn.textContent="Save";
+        setSettingsTab("email");
+        return toast("Test mode needs at least one test address","err");
+      }
+      await apiWrite("admins/notifyPrefs",prefs);
+      MASTER.admins.notifyPrefs=prefs;loadNotifyPrefs();
+    }
     // Apply locally right away; the CDN copy of admins/* can lag ~60s.
     for(const i of inputs){const em=i.getAttribute("data-email").toLowerCase();const n=i.value.trim();if(n)REPLY_NUMBERS[em]=n;else delete REPLY_NUMBERS[em];}
     refreshInBackground();
